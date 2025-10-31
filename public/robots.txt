@@ -1,0 +1,9 @@
+# *
+User-agent: *
+Allow: /
+
+# Host
+Host: https://firetminds.com
+
+# Sitemaps
+Sitemap: https://firetminds.com/sitemap.xml
