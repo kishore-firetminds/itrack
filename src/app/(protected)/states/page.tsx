@@ -13,12 +13,8 @@ import { Card } from '@/components/ui/card';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table';
-import { Search, Calendar as CalendarIcon, LoaderCircle, Pencil, X } from 'lucide-react';
+import { Search, LoaderCircle, Pencil, X } from 'lucide-react';
 import { CustomPagination } from '@/app/components/Pagination';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
-import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
 import { SidePopupForm, FormField } from './components/side-popup-form';
 
 /* ===================================================
@@ -53,10 +49,8 @@ export default function StatesPage() {
   const permissions = useSelector((s: RootState) => s.permissions.list);
 
   /* ---------- Permissions ---------- */
+  // permissions may be used later; keep permissions object available
   const SCREEN = 'States';
-  const canView = permissions.some((p) => p.screen === SCREEN && p.view);
-  const canEdit = permissions.some((p) => p.screen === SCREEN && p.edit);
-  const canAdd = permissions.some((p) => p.screen === SCREEN && p.add);
 
   /* ---------- States ---------- */
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -105,7 +99,7 @@ export default function StatesPage() {
   /* ===================================================
      📌 Fetch Countries
   =================================================== */
-  const fetchCountries = async () => {
+  const fetchCountries = useCallback(async () => {
     try {
       const res = await api.get(URLS.GET_COUNTRIES);
       const list = res.data?.data ?? [];
@@ -116,7 +110,7 @@ export default function StatesPage() {
     } catch (err) {
       console.error('Error fetching countries', err);
     }
-  };
+  }, []);
 
   /* ===================================================
      📌 Fetch States
@@ -145,7 +139,7 @@ export default function StatesPage() {
   useEffect(() => {
     fetchCountries();
     fetchStates();
-  }, [fetchStates]);
+  }, [fetchStates, fetchCountries]);
 
   /* ===================================================
      📌 Filtering
@@ -159,14 +153,14 @@ export default function StatesPage() {
 
     const onApplyFilters = () => {
     setCurrentPage(1);
-    setTimeout(fetchCountries, 0);
+    setTimeout(fetchStates, 0);
   };
   const onClearFilters = () => {
     setSearchText('');
     setStatusId('');
     setPickedDate(undefined);
     setCurrentPage(1);
-    setTimeout(fetchCountries, 0);
+    setTimeout(fetchStates, 0);
   };
 
 
@@ -314,7 +308,7 @@ export default function StatesPage() {
 
            {/* Filter / Clear Buttons */}
                     <div className="flex gap-4 justify-end">
-                      <Button onClick={onApplyFilters} className="rounded-full flex gap-2">
+                      <Button onClick={onApplyFilters} className="rounded-full flex gap-2"  style={{ backgroundColor: primaryColor, color: '#fff' }}>
                         Filter
                       </Button>
                       <Button

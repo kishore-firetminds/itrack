@@ -2,7 +2,6 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/store/store';
 import api from '@/utils/api';
@@ -41,8 +40,7 @@ type StatusOpt = { value: string; label: string };
 const PAGE_SIZE = 10;
 
 export default function RolesPage() {
-  const router = useRouter();
-  const primaryColor = useSelector((s: RootState) => s.ui.primaryColor);
+  const primaryColor = useSelector((s: RootState) => s.ui.primaryColor) ?? '#4F46E5';
   const permissions = useSelector((s: RootState) => s.permissions.list);
 
   const SCREEN = 'Roles';
@@ -136,8 +134,8 @@ export default function RolesPage() {
     setTimeout(fetchRoles, 0);
   };
 
-  const ApiErrors = (err: any) => {
-    const status = err?.response?.status;
+  const ApiErrors = (err: unknown) => {
+    const status = (err as { response?: { status?: number } })?.response?.status;
 
     if (status === 404) {
       toast.error("Role not found. It may have already been deleted.");
@@ -150,16 +148,17 @@ export default function RolesPage() {
     }
   };
 
-  const handleFormSubmit = async (data: Record<string, any>) => {
-    const slug = data.role_name
+  const handleFormSubmit = async (data: Record<string, unknown>) => {
+    const roleName = String(data.role_name ?? '');
+    const slug = roleName
       .toLowerCase()
       .replace(/\s+/g, '-')
       .replace(/[^a-z0-9\-]/g, '');
 
     const payload = {
-      role_name: data.role_name,
-      role_slug: slug,
-      status: !!data.status,
+      role_name: roleName,
+      role_slug: String(data.role_slug ?? slug),
+      status: Boolean(data.status),
     };
 
     try {
@@ -172,8 +171,8 @@ export default function RolesPage() {
       setEditData(null);
       fetchRoles();
       toast.success("Role saved successfully.");
-    } catch (err: any) {
-      console.error("Error saving role", err.response?.data || err.message);
+    } catch (err: unknown) {
+      console.error("Error saving role", (err as any)?.response?.data ?? (err as Error).message ?? err);
       ApiErrors(err);
     }
   };
@@ -261,7 +260,7 @@ export default function RolesPage() {
           </div>
 
           <div className="flex gap-4 justify-end">
-            <Button onClick={onApplyFilters} className="rounded-full flex gap-2">Filter</Button>
+            <Button onClick={onApplyFilters}      style={{ backgroundColor: primaryColor, color: '#fff' }} className="rounded-full flex gap-2">Filter</Button>
             <Button variant="outline" className="rounded-full" onClick={onClearFilters}>Clear</Button>
           </div>
         </div>

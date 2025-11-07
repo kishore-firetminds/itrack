@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useSelector } from 'react-redux';
 import { useRouter } from 'next/navigation';
 import api from '@/utils/api';
 import { URLS } from '@/utils/urls';
@@ -11,8 +12,9 @@ import { Card } from '@/components/ui/card';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table';
-import { Search, Pencil, X } from 'lucide-react';
+import { Pencil, X } from 'lucide-react';
 import { CustomPagination } from '@/app/components/Pagination';
+import type { RootState } from '@/store/store';
 
 type ClientRow = {
   client_id: string;
@@ -42,7 +44,7 @@ const PAGE_SIZE = 10;
 
 export default function ClientsPage() {
   const router = useRouter();
-
+const primaryColor = useSelector((s: RootState) => s.ui.primaryColor) ?? '#4F46E5';
   const [rows, setRows] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -93,6 +95,11 @@ export default function ClientsPage() {
       setRows(res.data?.data ?? []);
       setTotal(Number(res.data?.total ?? 0));
     } catch (err) {
+      const e = err as any;
+      if (e?.name === 'CanceledError' || e?.name === 'AbortError') {
+        // request was intentionally aborted, ignore
+        return;
+      }
       console.error('Fetch clients failed', err);
       setRows([]);
       setTotal(0);
@@ -139,9 +146,9 @@ export default function ClientsPage() {
       await api.delete(URLS.DELETE_CLIENT.replace('{id}', deleteId));
       fetchClients();
       toast.success('Client deleted successfully.');
-    } catch (err: any) {
-      console.error('Error deleting client', err);
-      toast.error(err?.response?.data?.message || 'Failed to delete client.');
+    } catch (error) {
+      console.error('Error deleting client', error);
+      toast.error((error as { response?: { data?: { message?: string } } })?.response?.data?.message || (error as Error).message || 'Failed to delete client.');
     } finally {
       setIsDeleteOpen(false);
       setDeleteId(null);
@@ -155,12 +162,12 @@ export default function ClientsPage() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-semibold text-gray-800">Clients</h1>
-        <Button className="rounded-3xl" onClick={() => router.push('/clients/create')}>Create</Button>
+        <Button className="rounded-3xl"   style={{ backgroundColor: primaryColor, color: '#fff' }} onClick={() => router.push('/client/create')}>Create</Button>
       </div>
 
       {/* Filters + Table */}
       <Card className="pt-0 gap-0">
-        <div className="flex flex-wrap gap-2 bg-[#f9fafb] items-center p-4 rounded-t-xl ">
+        <div className="flex flex-wrap gap-2 bg-[#f9fafb] items-center p-4 rounded-t-xl justify-end">
           <Input
             placeholder="Search name"
             className="h-8 w-44 border rounded-full px-3"
@@ -191,7 +198,7 @@ export default function ClientsPage() {
           </select>
 
           <div className="flex gap-4">
-            <Button onClick={onApplyFilters} className="rounded-full">Filter</Button>
+            <Button onClick={onApplyFilters}   style={{ backgroundColor: primaryColor, color: '#fff' }} className="rounded-full">Filter</Button>
             <Button variant="outline" onClick={onClearFilters} className="rounded-full">Clear</Button>
           </div>
         </div>

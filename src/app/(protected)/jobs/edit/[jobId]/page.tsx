@@ -28,6 +28,9 @@ import { URLS } from '@/utils/urls';
 import JobStatusSelector from '../../components/JobStatusSelector';
 import { toast } from 'sonner';
 
+// typed URL map to allow optional endpoints not present on the URLS type
+const urlMap = URLS as Record<string, string | undefined>;
+
 /** ---------------- Helpers ---------------- */
 const nowTimeStr = () => {
   const d = new Date();
@@ -468,7 +471,6 @@ export default function EditJobPage() {
           durationMinutes: String(minutes ?? 0),
           technician: job.technician_id ? String(job.technician_id) : '',
           jobStatusId: job.job_status_id ? String(job.job_status_id) : '',
-          technicianDetails: job?.technician,
         }));
 
         // also store the status title from job for gating
@@ -694,12 +696,10 @@ export default function EditJobPage() {
       setHasSearchedTechs(false);
       setTechnicians([]);
 
-      const res = await api.get<ApiEnvelope<UserBE[]>>('/admin/users', {
-        params: {
-          supervisor_id: formData.supervisor,
-          company_id: formData.companyId || undefined,
-        },
-      });
+      const params: Record<string, string | undefined> = { supervisor_id: formData.supervisor };
+      if (formData.companyId) params.company_id = formData.companyId;
+
+      const res = await api.get<ApiEnvelope<UserBE[]>>('/admin/users', { params });
 
       const raw = (res.data?.data ?? []) as UserBE[];
       setTechnicians(
@@ -778,8 +778,8 @@ export default function EditJobPage() {
       };
 
       // Prefer dedicated UPDATE URL if available
-      const updateUrl = URLS.UPDATE_JOB
-        ? `${URLS.UPDATE_JOB}/${jobId}`
+      const updateUrl = urlMap.UPDATE_JOB
+        ? `${urlMap.UPDATE_JOB}/${jobId}`
         : `/jobs/${jobId}`;
 
       // Use PUT or PATCH per your API
@@ -943,8 +943,8 @@ export default function EditJobPage() {
                 );
                 if (chosen) setCurrentStatusLabel(chosen.label);
 
-                const updateUrl = URLS.UPDATE_JOB
-                  ? `${URLS.UPDATE_JOB}/${jobId}`
+                const updateUrl = urlMap.UPDATE_JOB
+                  ? `${urlMap.UPDATE_JOB}/${jobId}`
                   : `/jobs/${jobId}`;
                 await api.put(updateUrl, { job_status_id: nextStatusId });
                 toast.success('Job status updated');
@@ -1384,18 +1384,16 @@ export default function EditJobPage() {
             <div className="flex items-center gap-4 flex-wrap">
               <span className="font-medium">
                 Selected Technician
-                {formData.technicianDetails?.name
-                  ? `: ${formData.technicianDetails.name}`
-                  : ''}
+                {selectedTechDetails?.name ? `: ${selectedTechDetails.name}` : ''}
               </span>
-              {formData.technicianDetails?.phone && (
+              {selectedTechDetails?.phone && (
                 <span className="opacity-70 flex items-center gap-1">
-                  <Phone size={14} /> {formData.technicianDetails.phone}
+                  <Phone size={14} /> {selectedTechDetails.phone}
                 </span>
               )}
-              {formData.technicianDetails?.email && (
+              {selectedTechDetails?.email && (
                 <span className="opacity-70 flex items-center gap-1">
-                  <Mail size={14} /> {formData.technicianDetails.email}
+                  <Mail size={14} /> {selectedTechDetails.email}
                 </span>
               )}
             </div>

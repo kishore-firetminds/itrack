@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/store/store';
@@ -65,17 +65,18 @@ export default function CreateCompanyPage() {
     state_id: '',
     district_id: '',
     postal_code: '',
+    pincode: '',
     city: '',
     lat: '',
     lng: '',
+    theme_color: '#4F46E5',
     proof: '',
     subscription_id: '',
     no_of_users: '',
+    subscription_amountPerUser: '',
     subscription_startDate: '',
     subscription_endDate: '',
-    subscription_amountPerUser: '',
     remarks: '',
-    theme_color: primaryColor,
     status: true,
   });
 
@@ -84,14 +85,13 @@ export default function CreateCompanyPage() {
     const loadRefs = async () => {
       try {
         const [countriesRes, subsRes] = await Promise.all([
-          api.get(URLS.GET_COUNTRIES).catch(() => ({ data: { data: [] } })),
-          api
-            .get(URLS.GET_SUBSCRIPTION_TYPES)
-            .catch(() => ({ data: { data: [] } })),
+          api.get(URLS.GET_COUNTRIES),
+          api.get(URLS.GET_SUBSCRIPTION_TYPES),
         ]);
         setCountries(countriesRes.data?.data ?? []);
         setSubscriptions(subsRes.data?.data ?? []);
-      } catch {
+      } catch (err: unknown) {
+        console.error('Failed to load reference data', err);
         setCountries([]);
         setSubscriptions([]);
       }
@@ -101,7 +101,7 @@ export default function CreateCompanyPage() {
 
   // ---------- Helpers ----------
   const setField = (k: string, v: any) =>
-    setFormData((prev) => ({ ...prev, [k]: v }));
+    setFormData((prev) => ({ ...prev, [k]: v === null || v === undefined ? '' : v }));
 
   const handlePasswordChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -149,7 +149,8 @@ export default function CreateCompanyPage() {
     setField('lat', '');
     setField('lng', '');
     try {
-      const res = await api.get(`${URLS.GET_PINCODES}?district_id=${districtId}`);
+      const districtParam = resolveDistrictId(districtId, districts);
+      const res = await api.get(`${URLS.GET_PINCODES}?district_id=${districtParam}`);
       setPinCodes(res.data?.data ?? []);
     } catch {
       setPinCodes([]);
@@ -163,6 +164,16 @@ export default function CreateCompanyPage() {
       setField('lat', selected.lat);
       setField('lng', selected.lng);
     }
+  };
+
+  // resolve district id helper: prefers UUID, falls back to lookup by name
+  const resolveDistrictId = (val: any, list: any[]) => {
+    const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+    const s = String(val ?? '');
+    if (!s) return '';
+    if (uuidRegex.test(s)) return s;
+    const found = list.find((d: any) => String(d.district_id) === s || String(d.district_name) === s);
+    return found ? String(found.district_id) : s;
   };
 
   // ---------- Save Handler ----------
@@ -181,29 +192,32 @@ export default function CreateCompanyPage() {
       if (k === 'logo' || k === 'proof' || k === 'confirmPassword') return;
       if (v === '' || v === null || v === undefined) return;
 
-      // ---------- Number fields ----------
-      if (['no_of_users', 'subscription_amountPerUser', 'lat', 'lng'].includes(k)) {
-        if (v !== '') {
-          const num = Number(v);
-          if (!isNaN(num)) form.append(k, String(num));
-        }
-      } else if (k === 'district_id') {
-        // Map district_id to city name
-        const selectedDistrict = districts.find(d => d.district_id === v);
-        if (selectedDistrict) form.append('city', selectedDistrict.district_name);
-      } else if (k === 'pincode') {
-        // Map pincode to postal_code
-        form.append('postal_code', v);
-      } else {
-        form.append(k, v as any);
+      // numeric or boolean fields -> string
+      if (['no_of_users', 'subscription_amountPerUser', 'lat', 'lng', 'status'].includes(k)) {
+        form.append(k, String(v));
+        return;
       }
+
+      if (k === 'district_id') {
+        const selectedDistrict = districts.find((d) => String(d.district_id) === String(v));
+        if (selectedDistrict) form.append('city', String(selectedDistrict.district_name));
+        form.append('district_id', String(v));
+        return;
+      }
+
+      if (k === 'pincode') {
+        form.append('postal_code', String(v));
+        return;
+      }
+
+      form.append(k, String(v));
     });
 
     if (logoFile) form.append('logo', logoFile);
-    else if (formData.logo) form.append('logo', formData.logo);
+    else if (formData.logo) form.append('logo', String(formData.logo));
 
     if (proofFile) form.append('proof', proofFile);
-    else if (formData.proof) form.append('proof', formData.proof);
+    else if ((formData as any).proof) form.append('proof', String((formData as any).proof));
 
     await api.post(URLS.CREATE_COMPANY, form, {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -211,11 +225,10 @@ export default function CreateCompanyPage() {
 
     toast.success('Company created successfully!');
     router.push('/company');
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error(err);
-    const errorMsg =
-      err?.response?.data?.error || err?.message || 'Failed to create company.';
-    toast.error(errorMsg);
+    const errorMsg = (err as any)?.response?.data?.error ?? (err as any)?.message ?? 'Failed to create company.';
+    toast.error(String(errorMsg));
   }
 };
 
@@ -229,9 +242,17 @@ export default function CreateCompanyPage() {
       <Card className="p-6 space-y-8">
         {/* Logo Upload */}
         <div>
-          <Label className="mb-2 block">Company Logo</Label>
+          <Label className="mb-2 block pb-3">Company Logo</Label>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-            <div className="flex justify-center">
+            <div className="flex justify-start " style={{
+              border: "3px dotted #b1b1b1",
+              borderRadius: "15px",
+              padding: "20px",
+              backgroundColor:  "#f8f9fa",
+              cursor: "pointer",
+              transition: "all 0.2s ease-in-out",
+              alignItems: "center",
+            }}>
               {logoFile ? (
                 <img
                   src={URL.createObjectURL(logoFile)}
@@ -249,13 +270,18 @@ export default function CreateCompanyPage() {
                   No Logo
                 </div>
               )}
-            </div>
-            <div>
+            
               <Input
                 type="file"
                 accept="image/*"
                 onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
                 className="border-2 border-dashed p-2"
+                style={{
+                  opacity: 1,
+                  height: '125px',
+                   
+                  margin: '3px',
+                }}
               />
               {logoFile && (
                 <p className="mt-2 text-sm text-gray-600">
@@ -270,14 +296,14 @@ export default function CreateCompanyPage() {
         <h2 className="text-lg font-semibold">Contact Information</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <Label>Company Name</Label>
+            <Label className='pb-3'>Company Name</Label>
             <Input
               value={formData.name}
               onChange={(e) => setField('name', e.target.value)}
             />
           </div>
           <div>
-            <Label>Email</Label>
+            <Label className='pb-3'>Email</Label>
             <Input
               type="email"
               value={formData.email}
@@ -285,14 +311,14 @@ export default function CreateCompanyPage() {
             />
           </div>
           <div>
-            <Label>GST Number</Label>
+            <Label className='pb-3'>GST Number</Label>
             <Input
               value={formData.gst}
               onChange={(e) => setField('gst', e.target.value)}
             />
           </div>
           <div>
-            <Label>Phone</Label>
+            <Label className='pb-3'>Phone</Label>
             <Input
               value={formData.phone}
               onChange={(e) => setField('phone', e.target.value)}
@@ -300,14 +326,14 @@ export default function CreateCompanyPage() {
           </div>
         
           <div className="md:col-span-2">
-            <Label>Address</Label>
+            <Label className='pb-3'>Address</Label>
             <Input
               value={formData.address_1}
               onChange={(e) => setField('address_1', e.target.value)}
             />
           </div>
          <div>
-          <Label>Country</Label>
+          <Label className='pb-3'>Country</Label>
           <Select
             value={formData.country_id}
             onValueChange={handleCountryChange}
@@ -327,7 +353,7 @@ export default function CreateCompanyPage() {
 
         {/* State */}
         <div>
-          <Label>State</Label>
+          <Label className='pb-3'>State</Label>
           <Select
             value={formData.state_id}
             onValueChange={handleStateChange}
@@ -348,7 +374,7 @@ export default function CreateCompanyPage() {
 
         {/* District */}
         <div>
-          <Label>District / City</Label>
+          <Label className='pb-3'>District / City</Label>
           <Select
             value={formData.district_id}
             onValueChange={handleDistrictChange}
@@ -369,7 +395,7 @@ export default function CreateCompanyPage() {
 
         {/* Postal Code */}
         <div>
-          <Label>Postal Code</Label>
+          <Label className='pb-3'>Postal Code</Label>
           <Select
             value={formData.pincode}
             onValueChange={handlePostalCodeChange}
@@ -393,12 +419,12 @@ export default function CreateCompanyPage() {
         {/* Latitude & Longitude (Disabled) */}
       
           <div>
-            <Label>Latitude</Label>
-            <Input value={formData.lat} disabled />
+            <Label className='pb-3'>Latitude</Label>
+            <Input value={formData.lat} disabled id="latitude" />
           </div>
           <div>
-            <Label>Longitude</Label>
-            <Input value={formData.lng} disabled />
+            <Label className='pb-3'>Longitude</Label>
+            <Input value={formData.lng} disabled id="longitude" />
           </div>
        
            
@@ -407,7 +433,7 @@ export default function CreateCompanyPage() {
         
           
          <div>
-  <Label>Password</Label>
+  <Label className='pb-3'>Password</Label>
   <div className="relative">
     <Input
       type={showPassword ? "text" : "password"}
@@ -426,7 +452,7 @@ export default function CreateCompanyPage() {
 </div>
 
 <div>
-  <Label>Confirm Password</Label>
+  <Label className='pb-3'>Confirm Password</Label>
   <div className="relative">
     <Input
       type={showConfirmPassword ? "text" : "password"}
@@ -451,7 +477,7 @@ export default function CreateCompanyPage() {
 
         {/* Proof Upload */}
         <div>
-          <Label className="mb-2 block">Company Proof (Document)</Label>
+          <Label className="mb-2 block pb-3">Company Proof (Document)</Label>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
             {/* Preview */}
             <div className="flex justify-center">
@@ -472,10 +498,10 @@ export default function CreateCompanyPage() {
                     View PDF
                   </a>
                 )
-              ) : formData.proof ? (
-                formData.proof.endsWith('.pdf') ? (
+              ) : (typeof formData.proof === 'string' && formData.proof) ? (
+                (formData.proof as string).endsWith('.pdf') ? (
                   <a
-                    href={formData.proof}
+                    href={formData.proof as string}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-600 underline"
@@ -484,7 +510,7 @@ export default function CreateCompanyPage() {
                   </a>
                 ) : (
                   <img
-                    src={formData.proof}
+                    src={formData.proof as string}
                     alt="Proof Preview"
                     className="w-32 h-32 object-contain border rounded-lg"
                   />
@@ -515,7 +541,7 @@ export default function CreateCompanyPage() {
         {/* Theme */}
         <h2 className="text-lg font-semibold">Company Theme</h2>
         <div className="flex items-center gap-3">
-          <Label>Theme Color</Label>
+          <Label className='pb-3'>Theme Color</Label>
           <Input
             type="color"
             className="w-16 h-10 p-1"
@@ -529,7 +555,7 @@ export default function CreateCompanyPage() {
         <h2 className="text-lg font-semibold">Subscription</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <Label>Subscription Plan</Label>
+            <Label className='pb-3'>Subscription Plan</Label>
             <Select
               value={formData.subscription_id}
               onValueChange={(v) => setField('subscription_id', v)}
@@ -548,7 +574,7 @@ export default function CreateCompanyPage() {
           </div>
 
           <div>
-            <Label>No. of Users</Label>
+            <Label className='pb-3'>No. of Users</Label>
             <Input
               type="number"
               value={formData.no_of_users}
@@ -557,7 +583,7 @@ export default function CreateCompanyPage() {
           </div>
 
           <div>
-            <Label>Amount per User</Label>
+            <Label className='pb-3'>Amount per User</Label>
             <Input
               type="number"
               value={formData.subscription_amountPerUser}
@@ -568,7 +594,7 @@ export default function CreateCompanyPage() {
           </div>
 
           <div>
-            <Label>From</Label>
+            <Label className='pb-3'>From</Label>
             <Input
               type="date"
               value={formData.subscription_startDate}
@@ -590,7 +616,7 @@ export default function CreateCompanyPage() {
           </div>
 
           <div className="md:col-span-2">
-            <Label>Remarks</Label>
+            <Label className='pb-3'>Remarks</Label>
             <Input
               value={formData.remarks}
               onChange={(e) => setField('remarks', e.target.value)}

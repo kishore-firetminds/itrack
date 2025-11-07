@@ -72,7 +72,7 @@ const PAGE_SIZE = 10;
 
 export default function RegionsPage() {
   const router = useRouter();
-  const primaryColor = useSelector((s: RootState) => s.ui.primaryColor);
+  const primaryColor = useSelector((s: RootState) => s.ui.primaryColor) ?? '#4F46E5';
   const permissions = useSelector((s: RootState) => s.permissions.list);
   const SCREEN = 'Region';
   const canEdit = permissions.some((p) => p.screen === SCREEN && p.edit);
@@ -115,10 +115,11 @@ const [selectedPincodes, setSelectedPincodes] = useState<string[]>([]);
       });
       setRows(res.data?.data ?? []);
       setTotal(Number(res.data?.total ?? 0));
-    } catch (err: any) {
+    } catch (err: unknown) {
       setRows([]);
       setTotal(0);
-      if (err?.response?.status === 401) router.push('/login');
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 401) router.push('/login');
     } finally {
       setLoading(false);
     }
@@ -205,15 +206,15 @@ const [selectedPincodes, setSelectedPincodes] = useState<string[]>([]);
     return map;
   }, [districts]);
 
-  const ApiErrors = (err: any) => {
-    const status = err?.response?.status;
-  
+  const ApiErrors = (err: unknown) => {
+    const status = (err as { response?: { status?: number } })?.response?.status;
+
     if (status === 404) {
       toast.error("Region not found. It may have already been deleted.");
     } else if (status === 403) {
       toast.error("You don't have permission to delete this Region.");
     } else if (status === 409) {
-        toast.error("Region already exists. Please use a different name.");
+      toast.error("Region already exists. Please use a different name.");
     } else {
       toast.error("Failed to delete Region. Please try again.");
     }
@@ -261,7 +262,7 @@ const [selectedPincodes, setSelectedPincodes] = useState<string[]>([]);
             />
           </div>
           <div className="flex gap-4 justify-end">
-            <Button className="rounded-full flex gap-2">
+            <Button className="rounded-full flex gap-2"      style={{ backgroundColor: primaryColor, color: '#fff' }}>
               <FilterIcon className="w-4 h-4" />
               Filter
             </Button>

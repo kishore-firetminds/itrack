@@ -89,6 +89,11 @@ GET_COMPANY_BY_ID: `${BASE_URL}/admin/companies/{id}`,
 
    // Pin codes (list)
   GET_PINCODES: `${BASE_URL}/settings/pincodes`,
+  // Get single pincode by code (for autofill latitude/longitude)
+  GET_PINCODE_BY_CODE: `${BASE_URL}/settings/pincodes/{pincode}`,
+  // Create and update pincodes
+  CREATE_PINCODE: `${BASE_URL}/settings/pincodes`,
+  UPDATE_PINCODE: `${BASE_URL}/settings/pincodes/{id}`,
 
   //Attendance
    GET_ATTENDANCE: `${BASE_URL}/admin/attendance`,

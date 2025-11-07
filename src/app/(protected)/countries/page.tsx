@@ -13,7 +13,7 @@ import { Card } from '@/components/ui/card';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table';
-import { Search, Calendar as CalendarIcon, LoaderCircle, Pencil, X } from 'lucide-react';
+import { Search, LoaderCircle, Pencil, X } from 'lucide-react';
 import { CustomPagination } from '@/app/components/Pagination';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -52,9 +52,6 @@ export default function CountriesPage() {
 
   /* ---------- Permissions ---------- */
   const SCREEN = 'Country';
-  const canView = permissions.some((p) => p.screen === SCREEN && p.view);
-  const canEdit = permissions.some((p) => p.screen === SCREEN && p.edit);
-  const canAdd = permissions.some((p) => p.screen === SCREEN && p.add);
 
   /* ---------- States ---------- */
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -115,7 +112,7 @@ export default function CountriesPage() {
       });
       setRows(res.data?.data ?? []);
       setTotal(Number(res.data?.total ?? 0));
-    } catch (err) {
+    } catch {
       setRows([]);
       setTotal(0);
     } finally {
@@ -153,33 +150,35 @@ export default function CountriesPage() {
   };
 
 
-   const ApiErrors = (err: any) => {
-      const status = err?.response?.status;
-    
-      if (status === 404) {
-        toast.error("Country not found. It may have already been deleted.");
-      } else if (status === 403) {
-        toast.error("You don't have permission to delete this Country.");
-      } else if (status === 409) {
-          toast.error("Country already exists. Please use a different name.");
-      } else {
-        toast.error("Failed to delete Country. Please try again.");
-      }
-    };
-  
-  
-  
+  const ApiErrors = (err: unknown) => {
+    const status = (err as { response?: { status?: number } })?.response?.status;
+
+    if (status === 404) {
+      toast.error("Country not found. It may have already been deleted.");
+    } else if (status === 403) {
+      toast.error("You don't have permission to delete this Country.");
+    } else if (status === 409) {
+        toast.error("Country already exists. Please use a different name.");
+    } else {
+      toast.error("Failed to delete Country. Please try again.");
+    }
+  };
+
 
 
   /* ===================================================
      📌 Form Submit
   =================================================== */
-  const handleFormSubmit = async (data: Record<string, any>) => {
-    const payload = {
-      country_name: data.country_name,
-      country_code: data.country_code,
+  const handleFormSubmit = async (data: Record<string, unknown>) => {
+    const payload: Record<string, unknown> = {
+      country_name: data.country_name as string,
+      country_code: data.country_code as string,
       country_status: !!data.country_status,
     };
+    if (data.country_id !== undefined && data.country_id !== null && String(data.country_id).trim() !== '') {
+      // allow numeric or string id
+      payload.country_id = Number.isNaN(Number(String(data.country_id))) ? String(data.country_id) : Number(String(data.country_id));
+    }
     try {
       if (editData) {
         await api.put(`${URLS.GET_COUNTRIES}/${editData.country_id}`, payload);
@@ -190,9 +189,9 @@ export default function CountriesPage() {
       setEditData(null);
       fetchCountries();
       toast.success("Country saved successfully.");
-    } catch (err) {
-      console.error('Error saving country', err);
-      ApiErrors(err);
+    } catch (error) {
+      console.error('Error saving country', error);
+      ApiErrors(error);
     }
   };
 
@@ -234,6 +233,7 @@ export default function CountriesPage() {
      📌 Form Fields
   =================================================== */
   const countryFields: FormField[] = [
+    { key: 'country_id', label: 'Country ID', type: 'text' },
     { key: 'country_name', label: 'Country Name', type: 'text', required: true },
     { key: 'country_code', label: 'Country Code', type: 'text', required: true },
     { key: 'country_status', label: 'Status', type: 'toggle' },
@@ -298,7 +298,7 @@ export default function CountriesPage() {
 
           {/* Filter / Clear Buttons */}
           <div className="flex gap-4 justify-end">
-            <Button onClick={onApplyFilters} className="rounded-full flex gap-2">
+            <Button onClick={onApplyFilters}  style={{ backgroundColor: primaryColor, color: '#fff' }} className="rounded-full flex gap-2">
               Filter
             </Button>
             <Button
@@ -317,6 +317,7 @@ export default function CountriesPage() {
             <TableHeader>
               <TableRow className="bg-gray-100">
                 <TableHead className="font-bold text-gray-800 text-center">S.No</TableHead>
+                <TableHead className="font-bold text-gray-800">ID</TableHead>
                 <TableHead className="font-bold text-gray-800">Country Name</TableHead>
                 <TableHead className="font-bold text-gray-800">Code</TableHead>
                 <TableHead className="font-bold text-gray-800 text-center">Status</TableHead>
@@ -336,9 +337,8 @@ export default function CountriesPage() {
               )}
               {filteredRows.map((c, i) => (
                 <TableRow key={c.country_id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                  <TableCell className="text-center ">
-                    {(currentPage - 1) * PAGE_SIZE + (i + 1)}
-                  </TableCell>
+                  <TableCell className="text-center ">{(currentPage - 1) * PAGE_SIZE + (i + 1)}</TableCell>
+                  <TableCell>{c.country_id ?? '-'}</TableCell>
                   <TableCell>{c.country_name}</TableCell>
                   <TableCell>{c.country_code}</TableCell>
                   <TableCell className="text-center">
@@ -381,6 +381,7 @@ export default function CountriesPage() {
         defaultValues={
           editData
             ? {
+                country_id: editData.country_id ?? '',
                 country_name: editData.country_name,
                 country_code: editData.country_code,
                 country_status: editData.country_status,

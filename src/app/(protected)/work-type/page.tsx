@@ -2,7 +2,6 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/store/store';
 import api from '@/utils/api';
@@ -38,12 +37,10 @@ type StatusOpt = { value: string; label: string };
 const PAGE_SIZE = 10;
 
 export default function WorkTypePage() {
-  const router = useRouter();
   const primaryColor = useSelector((s: RootState) => s.ui.primaryColor);
   const permissions = useSelector((s: RootState) => s.permissions.list);
 
   const SCREEN = 'Work Type';
-  const canView = permissions.some((p) => p.screen === SCREEN && p.view);
   const canEdit = permissions.some((p) => p.screen === SCREEN && p.edit);
   const canAdd = permissions.some((p) => p.screen === SCREEN && p.add);
 
@@ -109,7 +106,7 @@ export default function WorkTypePage() {
       });
       setRows(res.data?.data ?? []);
       setTotal(Number(res.data?.total ?? 0));
-    } catch (err) {
+    } catch {
       setRows([]);
       setTotal(0);
     } finally {
@@ -132,15 +129,15 @@ export default function WorkTypePage() {
   const onClearFilters = () => { setSearchText(''); setStatusId(''); setCurrentPage(1); setTimeout(fetchWorkTypes, 0); };
 
 
- const ApiErrors = (err: any) => {
-    const status = err?.response?.status;
-  
+  const ApiErrors = (err: unknown) => {
+    const status = (err as { response?: { status?: number } })?.response?.status;
+
     if (status === 404) {
       toast.error("Business Type not found. It may have already been deleted.");
     } else if (status === 403) {
       toast.error("You don't have permission to delete this Business Type.");
     } else if (status === 409) {
-        toast.error("Business Type already exists. Please use a different name.");
+      toast.error("Business Type already exists. Please use a different name.");
     } else {
       toast.error("Failed to delete Business Type. Please try again.");
     }
@@ -150,12 +147,12 @@ export default function WorkTypePage() {
 
 
 
-  const handleFormSubmit = async (data: Record<string, any>) => {
+  const handleFormSubmit = async (data: Record<string, unknown>) => {
     const payload = {
-      worktype_name: data.worktype_name,
-      worktype_description: data.worktype_description,
-      status: data.status === 'active',
-      company_id: isSuperAdmin ? data.company_id : user?.company_id, // force company_id for non-super
+      worktype_name: (data.worktype_name as string) || '',
+      worktype_description: (data.worktype_description as string) || '',
+      status: (data.status === 'active'),
+      company_id: isSuperAdmin ? (data.company_id as string) : user?.company_id,
     };
     try {
       if (editData) {
@@ -206,12 +203,18 @@ export default function WorkTypePage() {
     </div>
   );
 
-  const workTypeFields: FormField[] = [
-    ...(isSuperAdmin ? [{ key: 'company_id', label: 'Company', type: 'select', required: true }] : []),
-    { key: 'worktype_name', label: 'Name', type: 'text', required: true },
-    { key: 'worktype_description', label: 'Remarks', type: 'textarea' },
-    { key: 'status', label: 'Status', type: 'toggle' },
-  ];
+  const workTypeFields: FormField[] = (() => {
+    const f: FormField[] = [];
+    if (isSuperAdmin) {
+      f.push({ key: 'company_id', label: 'Company', type: 'select', required: true });
+    }
+    f.push(
+      { key: 'worktype_name', label: 'Name', type: 'text', required: true },
+      { key: 'worktype_description', label: 'Remarks', type: 'textarea' },
+      { key: 'status', label: 'Status', type: 'toggle' }
+    );
+    return f;
+  })();
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -251,7 +254,7 @@ export default function WorkTypePage() {
             </select>
           </div>
           <div className="flex gap-4 justify-end">
-            <Button onClick={onApplyFilters} className="rounded-full flex gap-2">Filter</Button>
+            <Button onClick={onApplyFilters} style={{ backgroundColor: primaryColor, color: '#fff' }} className="rounded-full flex gap-2">Filter</Button>
             <Button variant="outline" className="rounded-full" onClick={onClearFilters}>Clear</Button>
           </div>
         </div>
@@ -276,11 +279,7 @@ export default function WorkTypePage() {
                 </TableRow>
               )}
               {filteredRows.map((w, i) => {
-                 const company = companies.find(c => c.company_id === w.company_id)?.name || '-';
-                 
-                   console.log("Row company_id:", w.company_id);
-  console.log("Companies list:", companies.map(c => c.company_id));
-  console.log("Matched company:", company);
+                const company = companies.find(c => c.company_id === w.company_id)?.name || '-';
 
                 return (
                   <TableRow key={w.worktype_id} className={`${ i % 2 === 0 ? 'bg-white' : 'bg-gray-50' }`}>

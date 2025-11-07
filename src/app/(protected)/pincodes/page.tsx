@@ -237,7 +237,7 @@ export default function PincodesPage() {
         variant="outline"
         className="rounded-full"
         style={{ borderColor: 'red', color: 'red' }}
-        onClick={() => { setDeleteId(p.pincode_id!); setIsDeleteOpen(true); }}
+        onClick={() => { setDeleteId(String(p.pincode_id ?? p.pincode)); setIsDeleteOpen(true); }}
       >
         <X className="w-4 h-4" />
       </Button>
@@ -291,7 +291,7 @@ export default function PincodesPage() {
 
           {/* Filter / Clear Buttons */}
           <div className="flex gap-4 justify-end">
-            <Button onClick={onApplyFilters} className="rounded-full flex gap-2">
+            <Button onClick={onApplyFilters} className="rounded-full flex gap-2"   style={{ backgroundColor: primaryColor, color: '#fff' }}>
               Filter
             </Button>
             <Button
@@ -391,20 +391,26 @@ export default function PincodesPage() {
                 style={{ backgroundColor: 'red', color: '#fff' }}
                 onClick={async () => {
                   if (!deleteId) return;
-                  try { await api.delete(`${URLS.GET_PINCODES}/${deleteId}`); fetchPincodes();
-                   }
-                  catch (err) { console.error('Error deleting pincode', err);
+                  const id = String(deleteId);
+                  try {
+                    await api.delete(`${URLS.GET_PINCODES}/${encodeURIComponent(id)}`);
+                    await fetchPincodes();
+                    toast.success('Pincode deleted successfully.');
+                  } catch (err) {
+                    console.error('Error deleting pincode', err);
                     ApiErrors(err);
-                   }
-                  finally { setIsDeleteOpen(false); setDeleteId(null); }
+                  } finally {
+                    setIsDeleteOpen(false);
+                    setDeleteId(null);
+                  }
                 }}
               >
                 Delete
               </Button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+             </div>
+           </div>
+         </div>
+       )}
+     </div>
+   );
 }

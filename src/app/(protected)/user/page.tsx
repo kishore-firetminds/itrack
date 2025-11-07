@@ -87,13 +87,28 @@ export default function UsersPage() {
         signal: controller.signal,
       });
 
-      const userData = res.data?.data || [];
-      const mappedUsers = userData.map(u => ({
-        ...u,
-        company_name: companies.find(c => c.company_id === u.company_id)?.name || '-',
-        role_name: roles.find(r => r.role_id === u.role_id)?.role_name || '-',
-        region_names: u.region_ids?.map(id => regions.find(r => r.region_id === id)?.region_name || '-'),
-      }));
+      const userData: any[] = res.data?.data || [];
+      const mappedUsers = userData.map((u: any) => {
+        // prefer response fields, then nested objects, then master lists
+        const companyName = u.company_name ?? (u.Company?.name) ?? companies.find(c => String(c.company_id) === String(u.company_id))?.name ?? '-';
+        const roleName = u.role_name ?? (u.Role?.role_name) ?? roles.find(r => String(r.role_id) === String(u.role_id))?.role_name ?? '-';
+
+        let regionNames: string[] = [];
+        if (Array.isArray(u.region_ids) && u.region_ids.length > 0) {
+          regionNames = u.region_ids.map((id: string) => regions.find(r => String(r.region_id) === String(id))?.region_name ?? '').filter(Boolean);
+        } else if (u.region_name) {
+          regionNames = [String(u.region_name)];
+        } else if (u.region && (u.region.region_name || u.region.name)) {
+          regionNames = [u.region.region_name ?? u.region.name];
+        }
+
+        return {
+          ...u,
+          company_name: companyName,
+          role_name: roleName,
+          region_names: regionNames.length ? regionNames : [],
+        } as UserRow;
+      });
 
       setRows(mappedUsers);
       setTotal(Number(res.data?.total ?? 0));
@@ -155,9 +170,9 @@ export default function UsersPage() {
       </Button>
       <Button
         size="icon"
-        variant="outline"
+        variant="destructive"
         className="rounded-full button-click-effect"
-        style={{ borderColor: 'red', color: 'red' }}
+        style={{ borderColor: 'red', color: '#fff' }}
         onClick={() => {
           setDeleteId(u.user_id);
           setIsDeleteOpen(true);
@@ -173,7 +188,7 @@ export default function UsersPage() {
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-semibold text-gray-800">Users</h1>
           <Button
-          className="rounded-3xl"
+          className="rounded-3xl" style={{ backgroundColor: primaryColor, color: '#fff' }}
           onClick={() => router.push('/user/create')}
         >
           Create
@@ -194,7 +209,7 @@ export default function UsersPage() {
           </div>
 
           <div className="flex gap-4 justify-end">
-            <Button onClick={onApplyFilters} className="rounded-full">Filter</Button>
+            <Button onClick={onApplyFilters} className="rounded-full" style={{ backgroundColor: primaryColor, color: '#fff' }}>Filter</Button>
             <Button variant="outline" className="rounded-full" onClick={onClearFilters}>Clear</Button>
           </div>
         </div>

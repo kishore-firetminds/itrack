@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/store/store';
-
+import { toast } from "sonner";
 import api from '@/utils/api';
 import { URLS } from '@/utils/urls';
 
@@ -29,7 +29,7 @@ type RoleRow = { role_id: string; role_name: string };
 type RegionRow = { region_id: string; region_name: string };
 type CompanyRow = { company_id: string; name: string };
 type DistrictRow = { district_id: string; district_name: string };
-type PostalRow = { pincode: string; district_id: string };
+type PostalRow = { pincode: string; district_id: string; lat?: string; lng?: string; postal_code?: string; postal_code_id?: string; id?: string };
 
 // ---------- Component ----------
 export default function CreateVendorPage() {
@@ -65,6 +65,8 @@ export default function CreateVendorPage() {
     state_id: '',
     district_id: '',
     postal_code: '',
+    lat: '',
+    lng: '',
     address_1: '',
     role_id: '',
     region_id: '',
@@ -204,6 +206,62 @@ export default function CreateVendorPage() {
     loadPostals();
   }, [formData.district_id]);
 
+  // Autofill latitude/longitude when postal_code changes
+  useEffect(() => {
+    const rawPostal = String(formData.postal_code ?? '').trim();
+    if (!rawPostal) {
+      setField('lat', '');
+      setField('lng', '');
+      return;
+    }
+
+    // try local list first
+    const local = postals.find((p) => String(p.pincode) === rawPostal || String(p.postal_code) === rawPostal || String(p.postal_code_id) === rawPostal || String(p.id) === rawPostal);
+    if (local) {
+      setField('lat', local.lat ?? '');
+      setField('lng', local.lng ?? '');
+      return;
+    }
+
+    // try fetch single pincode endpoint, then fallback to query on pincodes
+    (async () => {
+      try {
+        const template = (URLS as any).GET_PINCODE_BY_CODE ?? URLS.GET_PINCODES + `?pincode=${encodeURIComponent(rawPostal)}`;
+        let single: any = null;
+        if ((URLS as any).GET_PINCODE_BY_CODE) {
+          try {
+            const sRes = await api.get((URLS as any).GET_PINCODE_BY_CODE.replace('{pincode}', encodeURIComponent(rawPostal)));
+            single = sRes.data?.data ?? sRes.data ?? null;
+          } catch {
+            // ignore
+          }
+        }
+        if (!single) {
+          try {
+            const qRes = await api.get(URLS.GET_PINCODES + `?pincode=${encodeURIComponent(rawPostal)}`);
+            const arr = qRes.data?.data ?? qRes.data ?? [];
+            single = Array.isArray(arr) && arr.length ? arr[0] : arr;
+          } catch {
+            // ignore
+          }
+        }
+
+        if (single) {
+          setField('lat', single.lat ?? '');
+          setField('lng', single.lng ?? '');
+          // append to local postals if not exists
+          setPostals((prev) => {
+            const exists = prev.find((p) => String(p.pincode) === String(single.pincode) || String(p.postal_code_id) === String(single.postal_code_id) || String(p.id) === String(single.id));
+            if (exists) return prev;
+            return [...prev as any, single];
+          });
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, [formData.postal_code, postals]);
+
   // ---------- Save ----------
   const handleSave = async () => {
     if (passwordError) return;
@@ -221,22 +279,34 @@ export default function CreateVendorPage() {
     ];
     for (const field of requiredFields) {
       if (!formData[field as keyof typeof formData]) {
-        return alert(`${field.replace('_', ' ')} is required.`);
+        return toast.error(`${field.replace('_', ' ')} is required.`);
       }
     }
-    if (formData.password !== formData.confirmPassword) return alert('Passwords do not match.');
+    if (formData.password !== formData.confirmPassword) return toast.error('Passwords do not match.');
 
     try {
+      // Resolve district_id to district name for 'city' field
+      let cityName = '';
+      if (formData.district_id) {
+        const sel = districts.find((d) => String(d.district_id) === String(formData.district_id));
+        if (sel) cityName = (sel as any).district_name || (sel as any).name || '';
+        else if (typeof formData.district_id === 'string') cityName = formData.district_id; // fallback to raw value
+      }
       const form = new FormData();
       Object.entries(formData).forEach(([k, v]) => {
         if (k === 'confirmPassword' || k === 'photo') return;
         if (k === 'password') {
           const hashed = bcrypt.hashSync(String(v), 10);
           form.append('password', hashed);
+        } else if (k === 'district_id') {
+          // skip district_id — API expects 'city' string instead
+          return;
         } else {
           form.append(k, v ?? '');
         }
       });
+      // append city name (string) if available
+      if (cityName) form.append('city', cityName);
       if (photoFile) form.append('photo', photoFile);
 
       const roleName = roles.find((r) => String(r.role_id) === String(formData.role_id))?.role_name || '';
@@ -245,11 +315,11 @@ export default function CreateVendorPage() {
       form.append('region', regionName);
 
       await api.post(URLS.CREATE_VENDOR, form, { headers: { 'Content-Type': 'multipart/form-data' } });
-      alert('Vendor created successfully!');
+      toast.success('Vendor created successfully!');
       router.push('/vendor');
     } catch (err: any) {
       console.error(err);
-      alert(err?.response?.data?.error || err?.message || 'Failed to create vendor.');
+      toast.error(err?.response?.data?.error || err?.message || 'Failed to create vendor.');
     }
   };
 
@@ -259,10 +329,20 @@ export default function CreateVendorPage() {
       <Card className="p-6 space-y-8">
         {/* Vendor Photo & Info */}
         <h2 className="text-lg font-semibold">Vendor & Password Details</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="md:col-span-2">
-            <Label>Vendor Photo</Label>
-            <div className="flex items-center gap-4 mt-2">
+          <Label className='pb-1'>Vendor Photo</Label>
+        <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
+         
+          <div className="md:col-span-1 ">
+           
+            <div className="flex items-center gap-4 mt-2 grid-cols-1 md:grid-cols-2" style={{
+              border: "3px dotted #b1b1b1",
+              borderRadius: "15px",
+              padding: "20px",
+              backgroundColor:  "#f8f9fa",
+              cursor: "pointer",
+              transition: "all 0.2s ease-in-out",
+              alignItems: "center",
+            }}>
               {photoFile ? (
                 <img
                   src={URL.createObjectURL(photoFile)}
@@ -284,18 +364,19 @@ export default function CreateVendorPage() {
                 type="file"
                 accept="image/*"
                 onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
-                className="border-2 border-dashed p-2"
+                className="w-auto border-2 border-dashed p-2"
               />
             </div>
           </div>
+          <div className="md:col-span-1 "></div>
 
           <div>
-            <Label>Vendor Name</Label>
+            <Label className='pb-3'>Vendor Name</Label>
             <Input value={formData.vendor_name} onChange={(e) => setField('vendor_name', e.target.value)} />
           </div>
 
           <div>
-            <Label>Company</Label>
+            <Label className='pb-3'>Company</Label>
             <Select
               value={String(formData.company_id)}
               onValueChange={(v) => setField('company_id', v)}
@@ -313,17 +394,17 @@ export default function CreateVendorPage() {
           </div>
 
           <div>
-            <Label>Email</Label>
+            <Label className='pb-3'>Email</Label>
             <Input type="email" value={formData.email} onChange={(e) => setField('email', e.target.value)} />
           </div>
 
           <div>
-            <Label>Phone</Label>
+            <Label className='pb-3'>Phone</Label>
             <Input value={formData.phone} onChange={(e) => setField('phone', e.target.value)} />
           </div>
 
           <div>
-            <Label>Password</Label>
+            <Label className='pb-3'>Password</Label>
             <div className="relative">
               <Input type={showPassword ? 'text' : 'password'} value={formData.password} onChange={(e) => setField('password', e.target.value)} className="pr-10" />
               <button type="button" className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500" onClick={() => setShowPassword((p) => !p)}>
@@ -333,7 +414,7 @@ export default function CreateVendorPage() {
           </div>
 
           <div>
-            <Label>Confirm Password</Label>
+            <Label className='pb-3'>Confirm Password</Label>
             <div className="relative">
               <Input type={showConfirmPassword ? 'text' : 'password'} value={formData.confirmPassword} onChange={(e) => handlePasswordChange('confirmPassword', e.target.value)} className="pr-10" />
               <button type="button" className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500" onClick={() => setShowConfirmPassword((p) => !p)}>
@@ -345,10 +426,10 @@ export default function CreateVendorPage() {
         </div>
 
         {/* Location & Address */}
-        <h2 className="text-lg font-semibold">Location & Address</h2>
+        <h2 className="text-lg font-semibold pb-3">Location & Address</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <Label>Country</Label>
+            <Label className='pb-3'>Country</Label>
             <Select value={String(formData.country_id)} onValueChange={(v) => setField('country_id', v)}>
               <SelectTrigger className="w-full"><SelectValue placeholder="Select Country" /></SelectTrigger>
               <SelectContent>{countries.map((c) => <SelectItem key={c.country_id} value={String(c.country_id)}>{c.country_name}</SelectItem>)}</SelectContent>
@@ -356,7 +437,7 @@ export default function CreateVendorPage() {
           </div>
 
           <div>
-            <Label>State / Province</Label>
+            <Label className='pb-3'>State / Province</Label>
             <Select value={String(formData.state_id)} onValueChange={(v) => setField('state_id', v)}>
               <SelectTrigger className="w-full"><SelectValue placeholder="Select State" /></SelectTrigger>
               <SelectContent>{states.map((s) => <SelectItem key={s.state_id} value={String(s.state_id)}>{s.state_name}</SelectItem>)}</SelectContent>
@@ -364,7 +445,7 @@ export default function CreateVendorPage() {
           </div>
 
           <div>
-            <Label>District (City)</Label>
+            <Label className='pb-3'>District (City)</Label>
             <Select value={String(formData.district_id)} onValueChange={(v) => setField('district_id', v)}>
               <SelectTrigger className="w-full"><SelectValue placeholder="Select District" /></SelectTrigger>
               <SelectContent>{districts.map((d) => <SelectItem key={d.district_id} value={String(d.district_id)}>{d.district_name}</SelectItem>)}</SelectContent>
@@ -372,7 +453,7 @@ export default function CreateVendorPage() {
           </div>
 
           <div>
-            <Label>Postal Code</Label>
+            <Label className='pb-3'>Postal Code</Label>
             <Select value={String(formData.postal_code)} onValueChange={(v) => setField('postal_code', v)}>
               <SelectTrigger className="w-full"><SelectValue placeholder="Select Postal Code" /></SelectTrigger>
               <SelectContent className="max-h-64 overflow-auto">
@@ -397,8 +478,17 @@ export default function CreateVendorPage() {
             </Select>
           </div>
 
+          <div>
+            <Label className='pb-3'>Latitude</Label>
+            <Input value={String(formData.lat ?? '')} disabled />
+          </div>
+          <div>
+            <Label>Longitude</Label>
+            <Input value={String(formData.lng ?? '')} disabled />
+          </div>
+
           <div className="md:col-span-2">
-            <Label>Address</Label>
+            <Label className='pb-3'>Address</Label>
             <Input value={formData.address_1} onChange={(e) => setField('address_1', e.target.value)} />
           </div>
         </div>
@@ -407,7 +497,7 @@ export default function CreateVendorPage() {
         <h2 className="text-lg font-semibold">Role & Region</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <Label>Role</Label>
+            <Label className='pb-3'>Role</Label>
             <Select value={String(formData.role_id)} onValueChange={(v) => setField('role_id', v)}>
               <SelectTrigger className="w-full"><SelectValue placeholder="Select Role" /></SelectTrigger>
               <SelectContent>{roles.filter((r) => r.role_name === 'Vendor / Contractor').map((r) => <SelectItem key={r.role_id} value={r.role_id}>{r.role_name}</SelectItem>)}</SelectContent>
@@ -415,7 +505,7 @@ export default function CreateVendorPage() {
           </div>
 
           <div>
-            <Label>Region</Label>
+            <Label className='pb-3'>Region</Label>
             <Select value={String(formData.region_id)} onValueChange={(v) => setField('region_id', v)}>
               <SelectTrigger className="w-full"><SelectValue placeholder="Select Region" /></SelectTrigger>
               <SelectContent>{regions.map((r) => <SelectItem key={r.region_id} value={r.region_id}>{r.region_name}</SelectItem>)}</SelectContent>

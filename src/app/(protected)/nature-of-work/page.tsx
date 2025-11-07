@@ -1,7 +1,7 @@
 // WorkTypePage.tsx
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useCallback, use } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/store/store';
@@ -14,12 +14,8 @@ import { Card } from '@/components/ui/card';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table';
-import { Search, Calendar as CalendarIcon, LoaderCircle, Pencil, X } from 'lucide-react';
+import { Search, LoaderCircle, Pencil, X } from 'lucide-react';
 import { CustomPagination } from '@/app/components/Pagination';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
-import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
 import { SidePopupForm, FormField } from './components/side-popup-form';
 
 /* ===================================================
@@ -46,14 +42,8 @@ const PAGE_SIZE = 10;
    📌 Component
 =================================================== */
 export default function NatureofWorkPage() {
-  const router = useRouter();
-
   /* ---------- Redux Data ---------- */
-  const primaryColor = useSelector((s: RootState) => s.ui.primaryColor);
-  const permissions = useSelector((s: RootState) => s.permissions.list);
-
-  /* ---------- Permissions ---------- */
-
+  const primaryColor = useSelector((s: RootState) => s.ui.primaryColor) ?? '#4F46E5';
 
   /* ---------- States ---------- */
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -128,19 +118,19 @@ export default function NatureofWorkPage() {
 
 
 
- const ApiErrors = (err: any) => {
-  const status = err?.response?.status;
+  const ApiErrors = (err: unknown) => {
+    const status = (err as { response?: { status?: number } })?.response?.status;
 
-  if (status === 404) {
-    toast.error("Nature of Work not found. It may have already been deleted.");
-  } else if (status === 403) {
-    toast.error("You don't have permission to delete this Nature of Work.");
-  } else if (status === 409) {
+    if (status === 404) {
+      toast.error("Nature of Work not found. It may have already been deleted.");
+    } else if (status === 403) {
+      toast.error("You don't have permission to delete this Nature of Work.");
+    } else if (status === 409) {
       toast.error("Nature of Work already exists. Please use a different name.");
-  } else {
-    toast.error("Failed to delete Nature of Work. Please try again.");
-  }
-};
+    } else {
+      toast.error("Failed to delete Nature of Work. Please try again.");
+    }
+  };
   /* ===================================================
      📌 Filtering
   =================================================== */
@@ -166,10 +156,10 @@ export default function NatureofWorkPage() {
   /* ===================================================
      📌 Form Submit
   =================================================== */
-  const handleFormSubmit = async (data: Record<string, any>) => {
+  const handleFormSubmit = async (data: Record<string, unknown>) => {
     const payload = {
-      now_name: data.now_name,
-      now_status: !!data.now_status, // boolean
+      now_name: String(data.now_name ?? ''),
+      now_status: !!data.now_status,
     };
     try {
       if (editData) {
@@ -182,11 +172,10 @@ export default function NatureofWorkPage() {
       fetchNatureofWork();
       toast.success("Nature of Work Saved successfully.");
     } catch (err) {
-      console.error('Error savingNature of Work', err);
+      console.error('Error saving Nature of Work', err);
     }
   };
 
- 
 
 
   /* ===================================================
@@ -286,7 +275,7 @@ export default function NatureofWorkPage() {
 
           {/* Filter / Clear Buttons */}
           <div className="flex gap-4 justify-end">
-            <Button onClick={onApplyFilters} className="rounded-full flex gap-2">Filter</Button>
+            <Button onClick={onApplyFilters}  style={{ backgroundColor: primaryColor, color: '#fff' }} className="rounded-full flex gap-2">Filter</Button>
             <Button variant="outline" className="rounded-full" onClick={onClearFilters}>Clear</Button>
           </div>
         </div>

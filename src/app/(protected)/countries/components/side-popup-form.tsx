@@ -20,8 +20,8 @@ interface SidePopupFormProps {
   onClose: () => void;
   title?: string;
   fields: FormField[];
-  defaultValues?: Record<string, any>;
-  onSubmit?: (data: Record<string, any>) => void;
+  defaultValues?: Record<string, unknown>;
+  onSubmit?: (data: Record<string, unknown>) => void;
   companies?: { company_id: string; name: string }[];
 }
 
@@ -34,12 +34,12 @@ export function SidePopupForm({
   onSubmit,
   companies = [],
 }: SidePopupFormProps) {
-  const [formData, setFormData] = useState<Record<string, any>>({});
+  const [formData, setFormData] = useState<Record<string, unknown>>({});
 
   // Initialize form data when modal opens or defaultValues change
   useEffect(() => {
     if (!isOpen) return;
-    const initialData: Record<string, any> = {};
+    const initialData: Record<string, unknown> = {};
     fields.forEach((field) => {
       if (field.type === 'toggle') {
         initialData[field.key] = defaultValues?.[field.key] ?? true;
@@ -50,11 +50,11 @@ export function SidePopupForm({
     setFormData(initialData);
   }, [defaultValues, fields, isOpen]);
 
-  const handleChange = (key: string, value: any) =>
+  const handleChange = (key: string, value: unknown) =>
     setFormData((prev) => ({ ...prev, [key]: value }));
 
   const toggleField = (key: string) =>
-    setFormData((prev) => ({ ...prev, [key]: !prev[key] }));
+    setFormData((prev) => ({ ...prev, [key]: !(prev[key] as boolean) }));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,7 +123,7 @@ export function SidePopupForm({
                   <Input
                     id={field.key}
                     type="text"
-                    value={formData[field.key] || ''}
+                    value={typeof formData[field.key] === 'string' || typeof formData[field.key] === 'number' ? String(formData[field.key]) : ''}
                     onChange={(e) => handleChange(field.key, e.target.value)}
                     className="w-full"
                     required={field.required}
@@ -134,7 +134,7 @@ export function SidePopupForm({
                 {field.type === 'textarea' && (
                   <Textarea
                     id={field.key}
-                    value={formData[field.key] || ''}
+                    value={typeof formData[field.key] === 'string' || typeof formData[field.key] === 'number' ? String(formData[field.key]) : ''}
                     onChange={(e) => handleChange(field.key, e.target.value)}
                     className="w-full min-h-24 resize-none"
                     rows={4}
@@ -167,7 +167,7 @@ export function SidePopupForm({
                 {field.type === 'select' && (
                   <select
                     id={field.key}
-                    value={formData[field.key] || ''}
+                    value={typeof formData[field.key] === 'string' || typeof formData[field.key] === 'number' ? String(formData[field.key]) : ''}
                     onChange={(e) => handleChange(field.key, e.target.value)}
                     className="w-full border rounded px-2 py-1"
                     required={field.required}

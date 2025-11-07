@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Search, Calendar as CalendarIcon, LoaderCircle, Pencil } from 'lucide-react';
+import { Search, LoaderCircle, Pencil, X } from 'lucide-react';
 import { CustomPagination } from '@/app/components/Pagination';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -43,12 +43,10 @@ type StatusOpt = { value: string; label: string };
 const PAGE_SIZE = 10;
 
 export default function WorkTypePage() {
-  const router = useRouter();
-  const primaryColor = useSelector((s: RootState) => s.ui.primaryColor);
+  const primaryColor = useSelector((s: RootState) => s.ui.primaryColor) ?? '#4F46E5';
   const permissions = useSelector((s: RootState) => s.permissions.list);
 
   const SCREEN = 'Job Type';
-  const canView = permissions.some((p) => p.screen === SCREEN && p.view);
   const canEdit = permissions.some((p) => p.screen === SCREEN && p.edit);
   const canAdd = permissions.some((p) => p.screen === SCREEN && p.add);
 
@@ -101,21 +99,21 @@ const [isDeleteOpen, setIsDeleteOpen] = useState(false);
     }
   }, [isSuperAdmin]);
 
-
-
-  // Fetch companies
+  // Fetch work types for lookup
   useEffect(() => {
-    api.get<{ data: Company[] }>(URLS.GET_COMPANIES)
-      .then(res => setCompanies(res.data?.data || []))
-      .catch(err => console.error('Failed to fetch companies', err));
+    const fetchWorktypes = async () => {
+      try {
+        const res = await api.get<{ data: WorkType[] }>(URLS.GETWORKTYPE);
+        setWorktypes(res.data?.data || []);
+      } catch (err) {
+        console.error('Failed to fetch work types', err);
+        setWorktypes([]);
+      }
+    };
+    fetchWorktypes();
   }, []);
 
-  // Fetch work types
-  useEffect(() => {
-    api.get<{ data: WorkType[] }>(URLS.GETWORKTYPE)
-      .then(res => setWorktypes(res.data?.data || []))
-      .catch(err => console.error('Failed to fetch work types', err));
-  }, []);
+
 
   // Build server params
   const buildServerParams = useCallback(() => {
@@ -163,33 +161,32 @@ const [isDeleteOpen, setIsDeleteOpen] = useState(false);
     );
   }, [rows, searchText]);
 
-   const ApiErrors = (err: any) => {
-      const status = err?.response?.status;
-    
-      if (status === 404) {
-        toast.error("Job Type not found. It may have already been deleted.");
-      } else if (status === 403) {
-        toast.error("You don't have permission to delete this Job Type.");
-      } else if (status === 409) {
-          toast.error("Job Type already exists. Please use a different name.");
-      } else {
-        toast.error("Failed to delete Job Type. Please try again.");
-      }
-    };
-  
-  
-  
+  const ApiErrors = (err: unknown) => {
+    const status = (err as { response?: { status?: number } })?.response?.status;
+
+    if (status === 404) {
+      toast.error("Job Type not found. It may have already been deleted.");
+    } else if (status === 403) {
+      toast.error("You don't have permission to delete this Job Type.");
+    } else if (status === 409) {
+      toast.error("Job Type already exists. Please use a different name.");
+    } else {
+      toast.error("Failed to delete Job Type. Please try again.");
+    }
+  };
 
 
 
-  const handleFormSubmit = async (data: Record<string, any>) => {
+  const handleFormSubmit = async (data: Record<string, unknown>) => {
+    const totalMins = Math.max(0, Number(data.estimated_duration ?? 0));
+
     const payload = {
-      jobtype_name: data.jobtype_name,
-      description: data.description,
+      jobtype_name: String(data.jobtype_name ?? ''),
+      description: String(data.description ?? ''),
       status: data.status === 'active',
-     company_id: isSuperAdmin ? data.company_id : user?.company_id,
-      worktype_id: data.worktype_id,
-      estimated_duration: Number(data.estimated_duration),
+      company_id: isSuperAdmin ? (data.company_id as string) : user?.company_id,
+      worktype_id: String(data.worktype_id ?? ''),
+      estimated_duration: totalMins,
     };
     try {
       if (editData) await api.put(`${URLS.GET_JOB_TYPE}/${editData.jobtype_id}`, payload);
@@ -204,7 +201,7 @@ const [isDeleteOpen, setIsDeleteOpen] = useState(false);
       ApiErrors(err);
     }
   };
- 
+
 
 
   const JobTypeActions = (j: JobTypeRow) => (
@@ -221,29 +218,33 @@ const [isDeleteOpen, setIsDeleteOpen] = useState(false);
         </Button>
       )}
     <Button
-  size="icon"
-  variant="outline"
-  className="rounded-full button-click-effect"
-  style={{ borderColor: 'red', color: 'red' }}
-  onClick={() => {
-    setDeleteId(j.jobtype_id!);
-    setIsDeleteOpen(true);
-  }}
->
-  X
-</Button>
+      size="icon"
+      variant="outline"
+      className="rounded-full button-click-effect"
+      style={{ borderColor: 'red', color: 'red' }}
+      onClick={() => {
+        setDeleteId(j.jobtype_id!);
+        setIsDeleteOpen(true);
+      }}
+    >
+      <X className="w-4 h-4" />
+    </Button>
 
     </div>
   );
 
-  const jobTypeFields: FormField[] = [
-  ...(isSuperAdmin ? [{ key: 'company_id', label: 'Company', type: 'select', required: true }] : []),
-    { key: "worktype_id", label: "Work Type", type: "select", required: true },
-    { key: "jobtype_name", label: "Name", type: "text", required: true },
-    { key: "description", label: "Remarks", type: "textarea" },
-    { key: "estimated_duration", label: "Estimated Duration", type: "duration", required: true },
-    { key: "status", label: "Status", type: "toggle" },
-  ];
+  const jobTypeFields: FormField[] = (() => {
+    const f: FormField[] = [];
+    if (isSuperAdmin) f.push({ key: 'company_id', label: 'Company', type: 'select', required: true });
+    f.push(
+      { key: 'worktype_id', label: 'Work Type', type: 'select', required: true },
+      { key: 'jobtype_name', label: 'Name', type: 'text', required: true },
+      { key: 'description', label: 'Remarks', type: 'textarea' },
+      { key: 'estimated_duration', label: 'Estimated Duration (minutes)', type: 'duration', required: true },
+      { key: 'status', label: 'Status', type: 'toggle' }
+    );
+    return f;
+  })();
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -281,8 +282,6 @@ const [isDeleteOpen, setIsDeleteOpen] = useState(false);
             />
           </div>
 
-        
-
           <div className="flex items-center gap-2 border rounded-full px-3 py-1">
             <LoaderCircle size={18} />
             <select className="outline-none bg-transparent text-sm h-8" value={statusId} onChange={(e) => setStatusId(e.target.value)}>
@@ -292,7 +291,7 @@ const [isDeleteOpen, setIsDeleteOpen] = useState(false);
           </div>
 
           <div className="flex gap-4 justify-end">
-            <Button onClick={() => { setCurrentPage(1); fetchJobTypesList(); }} className="rounded-full flex gap-2">Filter</Button>
+            <Button onClick={() => { setCurrentPage(1); fetchJobTypesList(); }}   style={{ backgroundColor: primaryColor, color: '#fff' }} className="rounded-full flex gap-2">Filter</Button>
             <Button variant="outline" className="rounded-full" onClick={() => { setSearchText(''); setStatusId(''); setPickedDate(undefined); setCurrentPage(1); fetchJobTypesList(); }}>Clear</Button>
           </div>
         </div>
@@ -320,7 +319,7 @@ const [isDeleteOpen, setIsDeleteOpen] = useState(false);
               )}
               {filteredRows.map((j, i) => {
                 const company = companies.find(c => c.company_id === j.company_id)?.name || '-';
-                const worktype = worktypes.find(w => w.worktype_id === j.worktype_id)?.worktype_name || '-';
+                const worktype = worktypes.find(w => String(w.worktype_id) === String(j.worktype_id))?.worktype_name || '-';
                 const rowKey = j.jobtype_id ? `job-${j.jobtype_id}` : `row-${i}`;
                 return (
                   <TableRow key={rowKey} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>

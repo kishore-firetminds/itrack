@@ -13,7 +13,7 @@ import { Card } from '@/components/ui/card';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table';
-import { Search, Calendar as CalendarIcon, LoaderCircle, Pencil, X } from 'lucide-react';
+import { Search, LoaderCircle, Pencil, X } from 'lucide-react';
 import { CustomPagination } from '@/app/components/Pagination';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -52,12 +52,6 @@ export default function DistrictsPage() {
   /* ---------- Redux Data ---------- */
   const primaryColor = useSelector((s: RootState) => s.ui.primaryColor);
   const permissions = useSelector((s: RootState) => s.permissions.list);
-
-  /* ---------- Permissions ---------- */
-  const SCREEN = 'District';
-  const canView = permissions.some((p) => p.screen === SCREEN && p.view);
-  const canEdit = permissions.some((p) => p.screen === SCREEN && p.edit);
-  const canAdd = permissions.some((p) => p.screen === SCREEN && p.add);
 
   /* ---------- Districts ---------- */
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -112,12 +106,12 @@ export default function DistrictsPage() {
     try {
       const res = await api.get(URLS.GET_COUNTRIES);
       const list = res.data?.data ?? [];
-      setCountries(list.map((c: any) => ({
+      setCountries(list.map((c: { country_id: number; country_name: string }) => ({
         value: c.country_id,
         label: c.country_name
       })));
-    } catch (err) {
-      console.error('Error fetching countries', err);
+    } catch (error) {
+      console.error('Error fetching countries', error);
     }
   };
 
@@ -125,12 +119,12 @@ export default function DistrictsPage() {
     try {
       const res = await api.get(URLS.GET_STATES);
       const list = res.data?.data ?? [];
-      setStates(list.map((s: any) => ({
+      setStates(list.map((s: { state_id: string; state_name: string }) => ({
         value: s.state_id,
         label: s.state_name
       })));
-    } catch (err) {
-      console.error('Error fetching states', err);
+    } catch (error) {
+      console.error('Error fetching states', error);
     }
   };
 
@@ -150,7 +144,7 @@ export default function DistrictsPage() {
       });
       setRows(res.data?.data ?? []);
       setTotal(Number(res.data?.total ?? 0));
-    } catch (err) {
+    } catch {
       setRows([]);
       setTotal(0);
     } finally {
@@ -174,7 +168,7 @@ export default function DistrictsPage() {
     );
   }, [rows, searchText]);
 
-    const onApplyFilters = () => {
+  const onApplyFilters = () => {
     setCurrentPage(1);
     setTimeout(fetchCountries, 0);
   };
@@ -186,15 +180,15 @@ export default function DistrictsPage() {
     setTimeout(fetchCountries, 0);
   };
 
- const ApiErrors = (err: any) => {
-    const status = err?.response?.status;
-  
+  const ApiErrors = (err: unknown) => {
+    const status = (err as { response?: { status?: number } })?.response?.status;
+
     if (status === 404) {
       toast.error("District not found. It may have already been deleted.");
     } else if (status === 403) {
       toast.error("You don't have permission to delete this District.");
     } else if (status === 409) {
-        toast.error("District already exists. Please use a different name.");
+      toast.error("District already exists. Please use a different name.");
     } else {
       toast.error("Failed to delete District. Please try again.");
     }
@@ -206,11 +200,11 @@ export default function DistrictsPage() {
   /* ===================================================
      📌 Form Submit
   =================================================== */
-  const handleFormSubmit = async (data: Record<string, any>) => {
+  const handleFormSubmit = async (data: Record<string, unknown>) => {
     const payload = {
       country_id: Number(data.country_id),
-      state_id: data.state_id,
-      district_name: data.district_name,
+      state_id: data.state_id as string,
+      district_name: data.district_name as string,
       district_status: !!data.district_status,
     };
     try {
@@ -223,9 +217,9 @@ export default function DistrictsPage() {
       setEditData(null);
       fetchDistricts();
       toast.success("District saved successfully.");
-    } catch (err) {
-      console.error('Error saving district', err);
-      ApiErrors(err);
+    } catch (error) {
+      console.error('Error saving district', error);
+      ApiErrors(error);
     }
   };
 
@@ -247,7 +241,7 @@ export default function DistrictsPage() {
   =================================================== */
   const DistrictActions = (d: DistrictRow) => (
     <div className="flex gap-2 justify-center">
-      {  (
+      {(
         <Button
           size="icon"
           variant="outline"
@@ -296,7 +290,7 @@ export default function DistrictsPage() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-semibold text-gray-800">Districts</h1>
-        {   (
+        {(
           <Button
             onClick={() => { setIsOpen(true); setEditData(null); }}
             style={{ backgroundColor: primaryColor, color: '#fff' }}
@@ -321,7 +315,7 @@ export default function DistrictsPage() {
               onChange={(e) => setSearchText(e.target.value)}
             />
           </div>
- 
+
 
           {/* Status */}
           <div className="flex items-center gap-2 border rounded-full px-3 py-1">
@@ -338,20 +332,20 @@ export default function DistrictsPage() {
             </select>
           </div>
 
-          
-           {/* Filter / Clear Buttons */}
-                    <div className="flex gap-4 justify-end">
-                      <Button onClick={onApplyFilters} className="rounded-full flex gap-2">
-                        Filter
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="rounded-full"
-                        onClick={onClearFilters}
-                      >
-                        Clear
-                      </Button>
-                    </div>
+
+          {/* Filter / Clear Buttons */}
+          <div className="flex gap-4 justify-end">
+            <Button onClick={onApplyFilters} className="rounded-full flex gap-2"    style={{ backgroundColor: primaryColor, color: '#fff' }}>
+              Filter
+            </Button>
+            <Button
+              variant="outline"
+              className="rounded-full"
+              onClick={onClearFilters}
+            >
+              Clear
+            </Button>
+          </div>
 
 
         </div>
@@ -360,7 +354,7 @@ export default function DistrictsPage() {
         <div className="hidden md:block w-full overflow-x-auto  pb-4">
           <Table>
             <TableHeader>
-               <TableRow className="bg-gray-100">
+              <TableRow className="bg-gray-100">
                 <TableHead className="font-bold text-gray-800 text-center">S.No</TableHead>
                 <TableHead className="font-bold text-gray-800 ">Country</TableHead>
                 <TableHead className="font-bold text-gray-800">State</TableHead>
@@ -381,16 +375,15 @@ export default function DistrictsPage() {
                 const country = countries.find(c => c.value === d.country_id)?.label || '-';
                 const state = states.find(s => s.value === d.state_id)?.label || '-';
                 return (
-                  <TableRow key={d.district_id}  className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                  <TableRow key={d.district_id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                     <TableCell className="text-center ">{(currentPage - 1) * PAGE_SIZE + (i + 1)}</TableCell>
                     <TableCell>{country}</TableCell>
                     <TableCell>{state}</TableCell>
                     <TableCell>{d.district_name}</TableCell>
                     <TableCell className="text-center">
                       <span
-                        className={`rounded-full px-3 py-1 text-sm ${
-                          d.district_status ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                        }`}
+                        className={`rounded-full px-3 py-1 text-sm ${d.district_status ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                          }`}
                       >
                         {d.district_status ? 'Active' : 'Inactive'}
                       </span>

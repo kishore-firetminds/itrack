@@ -1,12 +1,9 @@
-// BusinessTypesPage.tsx
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { useSelector } from 'react-redux';
-import type { RootState } from '@/store/store';
 import api from '@/utils/api';
 import { URLS } from '@/utils/urls';
+import { useSelector } from 'react-redux';
 import { toast } from "sonner";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,13 +11,10 @@ import { Card } from '@/components/ui/card';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table';
-import { Search, Calendar as CalendarIcon, LoaderCircle, Pencil, X } from 'lucide-react';
+import { Search, LoaderCircle, Pencil, X } from 'lucide-react';
 import { CustomPagination } from '@/app/components/Pagination';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
-import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
-import { SidePopupForm } from './components/side-popup-form';
+import { SidePopupForm, FormField } from './components/side-popup-form';
+import type { RootState } from '@/store/store';
 
 /* ===================================================
    📌 Types
@@ -40,40 +34,36 @@ type PaginatedBusiness = {
 
 type StatusOpt = { value: string; label: string };
 
+type BusinessFormData = {
+  business_typeName: string;
+  status: boolean;
+};
+
 const PAGE_SIZE = 10;
 
 /* ===================================================
    📌 Component
 =================================================== */
 export default function BusinessTypesPage() {
-  const router = useRouter();
 
-  /* ---------- Redux Data ---------- */
-  const primaryColor = useSelector((s: RootState) => s.ui.primaryColor);
-  const permissions = useSelector((s: RootState) => s.permissions.list);
-
- 
-
+    const primaryColor = useSelector((s: RootState) => s.ui.primaryColor) ?? '#4F46E5';
   /* ---------- States ---------- */
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [total, setTotal] = useState<number>(0);
-
   const [pickedDate, setPickedDate] = useState<Date | undefined>(undefined);
   const [statusId, setStatusId] = useState<string>('');
   const [searchText, setSearchText] = useState<string>('');
   const [rows, setRows] = useState<BusinessRow[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
-
   const [isOpen, setIsOpen] = useState(false);
   const [editData, setEditData] = useState<BusinessRow | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
   const [statusOpts] = useState<StatusOpt[]>([
     { value: 'true', label: 'Active' },
     { value: 'false', label: 'Inactive' },
   ]);
-
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -113,7 +103,7 @@ export default function BusinessTypesPage() {
       });
       setRows(res.data?.data ?? []);
       setTotal(Number(res.data?.total ?? 0));
-    } catch (err) {
+    } catch {
       setRows([]);
       setTotal(0);
     } finally {
@@ -150,9 +140,9 @@ export default function BusinessTypesPage() {
   /* ===================================================
      📌 Form Submit
   =================================================== */
-  const handleFormSubmit = async (data: Record<string, any>) => {
+  const handleFormSubmit = async (data: Record<string, unknown>) => {
     const payload = {
-      business_typeName: data.business_typeName,
+      business_typeName: String(data.business_typeName ?? ''),
       status: !!data.status,
     };
     try {
@@ -170,43 +160,37 @@ export default function BusinessTypesPage() {
     }
   };
 
-  
-  const ApiErrors = (err: any) => {
-    const status = err?.response?.status;
-  
+  const ApiErrors = (err: unknown) => {
+    const status = (err as { response?: { status?: number } })?.response?.status;
+
     if (status === 404) {
       toast.error("Business Type not found. It may have already been deleted.");
     } else if (status === 403) {
       toast.error("You don't have permission to delete this Business Type.");
     } else if (status === 409) {
-        toast.error("Business Type already exists. Please use a different name.");
+      toast.error("Business Type already exists. Please use a different name.");
     } else {
       toast.error("Failed to delete Business Type. Please try again.");
     }
   };
-
-
-
 
   /* ===================================================
      📌 Table Actions
   =================================================== */
   const BusinessActions = (b: BusinessRow) => (
     <div className="flex gap-2 justify-center">
-      
-        <Button
-          size="icon"
-          variant="outline"
-          className="rounded-full button-click-effect"
-          style={{ borderColor: primaryColor, color: primaryColor }}
-          onClick={() => {
-            setEditData(b);
-            setIsOpen(true);
-          }}
-        >
-          <Pencil className="w-4 h-4" />
-        </Button>
-      
+      <Button
+        size="icon"
+        variant="outline"
+        className="rounded-full button-click-effect"
+        onClick={() => {
+          setEditData(b);
+          setIsOpen(true);
+        }}
+      >
+        <Pencil className="w-4 h-4" />
+      </Button>
+
       <Button
         size="icon"
         variant="outline"
@@ -240,15 +224,13 @@ export default function BusinessTypesPage() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-semibold text-gray-800">Business Types</h1>
-      
-          <Button
-            onClick={() => { setIsOpen(true); setEditData(null); }}
+        <Button
+          onClick={() => { setIsOpen(true); setEditData(null); }}
             style={{ backgroundColor: primaryColor, color: '#fff' }}
-            className="rounded-3xl button-click-effect"
-          >
-            Create
-          </Button>
-       
+          className="rounded-3xl button-click-effect"
+        >
+          Create
+        </Button>
       </div>
 
       {/* Card: Filters + Table */}
@@ -265,8 +247,6 @@ export default function BusinessTypesPage() {
               onChange={(e) => setSearchText(e.target.value)}
             />
           </div>
-
- 
 
           {/* Status */}
           <div className="flex items-center gap-2 border rounded-full px-3 py-1">
@@ -285,13 +265,13 @@ export default function BusinessTypesPage() {
 
           {/* Filter / Clear Buttons */}
           <div className="flex gap-4 justify-end">
-            <Button onClick={onApplyFilters} className="rounded-full flex gap-2">Filter</Button>
+            <Button onClick={onApplyFilters}   style={{ backgroundColor: primaryColor, color: '#fff' }} className="rounded-full flex gap-2">Filter</Button>
             <Button variant="outline" className="rounded-full" onClick={onClearFilters}>Clear</Button>
           </div>
         </div>
 
         {/* Table */}
-        <div className="hidden md:block w-full overflow-x-auto  pb-4">
+        <div className="hidden md:block w-full overflow-x-auto pb-4">
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-100">
@@ -344,9 +324,9 @@ export default function BusinessTypesPage() {
         title={editData ? 'Edit Business Type' : 'Add New Business Type'}
         fields={businessFields}
         defaultValues={editData ? {
-          business_typeName: editData.business_typeName,
-          status: editData.status,
-        } : { status: true }}
+          business_typeName: editData.business_typeName || '',
+          status: typeof editData.status === 'boolean' ? editData.status : true,
+        } : { business_typeName: '', status: true }}
         onSubmit={handleFormSubmit}
       />
 
@@ -372,8 +352,7 @@ export default function BusinessTypesPage() {
                     fetchBusinessTypes();
                     toast.success("Business Type deleted successfully.");
                   } catch (err) {
-                    console.error('Error deleting business type', err);
-                      ApiErrors(err);
+                    ApiErrors(err);
                   } finally {
                     setIsDeleteOpen(false);
                     setDeleteId(null);

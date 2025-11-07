@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSelector } from 'react-redux';
 import api from '@/utils/api';
 import { URLS } from '@/utils/urls';
 import { Button } from '@/components/ui/button';
@@ -10,20 +11,41 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import type { RootState } from '@/store/store';
 
 export default function CreateClientPage() {
   const router = useRouter();
-
-  const [companies, setCompanies] = useState<any[]>([]);
-  const [businessTypes, setBusinessTypes] = useState<any[]>([]);
-  const [countries, setCountries] = useState<any[]>([]);
-  const [states, setStates] = useState<any[]>([]);
-  const [districts, setDistricts] = useState<any[]>([]);
-  const [cities, setCities] = useState<any[]>([]);
-  const [pincodes, setPincodes] = useState<any[]>([]);
+  const primaryColor = useSelector((s: RootState) => s.ui.primaryColor) ?? '#4F46E5';
+  const [companies, setCompanies] = useState<{ company_id: string; name: string }[]>([]);
+  const [businessTypes, setBusinessTypes] = useState<{ business_typeId: string; business_typeName: string }[]>([]);
+  const [countries, setCountries] = useState<{ country_id: string; country_name: string }[]>([]);
+  const [states, setStates] = useState<{ state_id: string; state_name: string }[]>([]);
+  const [districts, setDistricts] = useState<{ district_id: string; district_name: string }[]>([]);
+  const [pincodes, setPincodes] = useState<{ pincode: string; lat?: string; lng?: string; hidden?: boolean }[]>([]);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
 
-  const [formData, setFormData] = useState<any>({
+  interface ClientFormData {
+    company_id: string;
+    business_typeId: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    address_1: string;
+    country_id: string;
+    state_id: string;
+    district_id: string;
+    city_id: string;
+    postal_code: string;
+    lat: string;
+    lng: string;
+    visiting_startTime: string;
+    visiting_endTime: string;
+    available_status: boolean;
+    photo: string;
+  }
+
+  const [formData, setFormData] = useState<ClientFormData>({
     company_id: '',
     business_typeId: '',
     firstName: '',
@@ -44,8 +66,24 @@ export default function CreateClientPage() {
     photo: '',
   });
 
-  const setField = (k: string, v: any) =>
-    setFormData((prev: any) => ({ ...prev, [k]: v }));
+  // Safe read of current user from localStorage to detect company-scoped login
+  const [currentUser] = useState<any>(() => {
+    try {
+      if (typeof window === 'undefined') return null;
+      const raw = localStorage.getItem('user');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const detectedCompanyId =
+    currentUser?.company_id || currentUser?.company?.company_id || '';
+  const detectedCompanyName =
+    currentUser?.company?.name || currentUser?.company_name || '';
+
+  const setField = (k: keyof ClientFormData, v: string | boolean) =>
+    setFormData((prev) => ({ ...prev, [k]: v }));
 
   // Load companies, business types, countries
   useEffect(() => {
@@ -60,6 +98,14 @@ export default function CreateClientPage() {
         setCompanies(companiesRes.data?.data ?? []);
         setBusinessTypes(businessTypesRes.data?.data ?? []);
         setCountries(countriesRes.data?.data ?? []);
+        // If user is scoped to a company, prefill company_id
+        if (detectedCompanyId) {
+          setFormData((prev) => ({ ...prev, company_id: String(detectedCompanyId) }));
+          // Ensure company list contains the user's company for display
+          if (!((companiesRes.data?.data ?? []).some((c: any) => String(c.company_id) === String(detectedCompanyId)))) {
+            setCompanies((prev) => [{ company_id: String(detectedCompanyId), name: String(detectedCompanyName || detectedCompanyId) }, ...prev]);
+          }
+        }
       } catch {
         setCompanies([]);
         setBusinessTypes([]);
@@ -84,12 +130,12 @@ export default function CreateClientPage() {
       setField('city_id', '');
       setField('postal_code', '');
       setDistricts([]);
-      setCities([]);
       setPincodes([]);
       setField('lat', '');
       setField('lng', '');
     };
     fetchStates();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.country_id]);
 
   // Load districts when state changes
@@ -105,12 +151,12 @@ export default function CreateClientPage() {
       setField('district_id', '');
       setField('city_id', '');
       setField('postal_code', '');
-      setCities([]);
       setPincodes([]);
       setField('lat', '');
       setField('lng', '');
     };
     fetchDistricts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.state_id]);
 
   // Load pincodes when district changes
@@ -128,6 +174,7 @@ export default function CreateClientPage() {
       setField('lng', '');
     };
     fetchPincodes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.district_id]);
 
   // Set lat/lng when pincode selected
@@ -141,6 +188,7 @@ export default function CreateClientPage() {
       setField('lat', '');
       setField('lng', '');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.postal_code, pincodes]);
 
   // Form validation
@@ -167,7 +215,7 @@ export default function CreateClientPage() {
       const form = new FormData();
       Object.entries(formData).forEach(([k, v]) => {
         if (v === '' || v === null || v === undefined) return;
-        form.append(k, v as any);
+        form.append(k, v as string | Blob);
       });
       if (photoFile) form.append('photo', photoFile);
 
@@ -175,9 +223,9 @@ export default function CreateClientPage() {
 
       alert('Client created successfully!');
       router.push('/client');
-    } catch (err: any) {
-      console.error(err);
-      alert(err?.response?.data?.error || err.message || 'Failed to create client.');
+    } catch (error) {
+      console.error(error);
+      alert((error as { response?: { data?: { error?: string } } })?.response?.data?.error || (error as Error).message || 'Failed to create client.');
     }
   };
 
@@ -187,70 +235,107 @@ export default function CreateClientPage() {
 
       <Card className="p-6 space-y-8">
         {/* Photo Upload */}
-        <fieldset className="space-y-2">
-          <legend className="text-lg font-medium">Photo</legend>
-          <div className="flex items-center gap-4">
-            {photoFile ? (
-              <img
-                src={URL.createObjectURL(photoFile)}
-                alt="Photo Preview"
-                className="w-32 h-32 object-contain border rounded-lg"
-              />
-            ) : (
-              <div className="w-32 h-32 flex items-center justify-center text-gray-400 border border-dashed rounded-lg">
-                No Photo
-              </div>
-            )}
-            <Input
-              type="file"
-              accept="image/*"
-              onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
-              className="border-2 border-dashed p-2"
-            />
-          </div>
-        </fieldset>
+       <fieldset className="space-y-2">
+  <legend className="text-lg font-medium pb-3">Photo</legend>
+
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+    {/* ✅ First Column — Photo Upload Box */}
+    <div
+      className="flex items-center gap-4"
+      style={{
+        border: "3px dotted #b1b1b1",
+        borderRadius: "15px",
+        padding: "20px",
+        backgroundColor: "#f8f9fa",
+        cursor: "pointer",
+        transition: "all 0.2s ease-in-out",
+        alignItems: "center",
+      }}
+    >
+      {photoFile ? (
+        <img
+          src={URL.createObjectURL(photoFile)}
+          alt="Photo Preview"
+          className="w-32 h-32 object-contain border rounded-lg"
+        />
+      ) : (
+        <div className="w-32 h-32 flex items-center justify-center text-gray-400 border border-dashed rounded-lg">
+          No Photo
+        </div>
+      )}
+
+      <Input
+        type="file"
+        accept="image/*"
+        onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
+        className="border-2 border-dashed p-2"
+         style={{
+                  opacity: 1,
+                  height: '125px',
+                   
+                  margin: '3px',
+                }}
+      />
+    </div>
+
+    {/* ✅ Second Column — Empty */}
+    <div></div>
+
+  </div>
+</fieldset>
+
 
         {/* Basic Information */}
         <fieldset className="space-y-4">
           <legend className="text-lg font-medium">Basic Information</legend>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label>First Name</Label>
+              <Label className='pb-3'>First Name</Label>
               <Input value={formData.firstName} onChange={(e) => setField('firstName', e.target.value)} />
             </div>
             <div>
-              <Label>Last Name</Label>
+              <Label className='pb-3'>Last Name</Label>
               <Input value={formData.lastName} onChange={(e) => setField('lastName', e.target.value)} />
             </div>
             <div>
-              <Label>Email</Label>
+              <Label className='pb-3'>Email</Label>
               <Input type="email" value={formData.email} onChange={(e) => setField('email', e.target.value)} />
             </div>
             <div>
-              <Label>Phone</Label>
+              <Label className='pb-3'>Phone</Label>
               <Input value={formData.phone} onChange={(e) => setField('phone', e.target.value)} />
             </div>
           </div>
         </fieldset>
-
+ 
         {/* Company & Business */}
         <fieldset className="space-y-4">
           <legend className="text-lg font-medium">Company & Business</legend>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label>Company</Label>
-              <Select value={formData.company_id} onValueChange={(v) => setField('company_id', v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select Company" />
-                </SelectTrigger>
-                <SelectContent>
-                  {companies.map((c) => (
-                    <SelectItem key={`company-${c.company_id}`} value={c.company_id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className='pb-3'>Company</Label>
+              {detectedCompanyId ? (
+                // read-only display when user is scoped to a company
+                <div className="w-full">
+                  <div className="p-2 border rounded bg-gray-50 text-gray-800">
+                    {detectedCompanyName || (companies.find(c => String(c.company_id) === String(detectedCompanyId))?.name) || detectedCompanyId}
+                  </div>
+                </div>
+              ) : (
+                <Select value={formData.company_id} onValueChange={(v) => setField('company_id', v)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select Company" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {companies.map((c) => (
+                      <SelectItem key={`company-${c.company_id}`} value={c.company_id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <div>
@@ -272,12 +357,12 @@ export default function CreateClientPage() {
           <legend className="text-lg font-medium">Location & Area</legend>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label>Address</Label>
+              <Label className='pb-3'>Address</Label>
               <Input value={formData.address_1} onChange={(e) => setField('address_1', e.target.value)} />
             </div>
 
             <div>
-              <Label>Country</Label>
+              <Label className='pb-3'>Country</Label>
               <Select value={formData.country_id} onValueChange={(v) => setField('country_id', v)}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select Country" />
@@ -293,7 +378,7 @@ export default function CreateClientPage() {
             </div>
 
             <div>
-              <Label>State</Label>
+              <Label className='pb-3'>State</Label>
               <Select value={formData.state_id} onValueChange={(v) => setField('state_id', v)} disabled={!states.length}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select State" />
@@ -309,7 +394,7 @@ export default function CreateClientPage() {
             </div>
 
             <div>
-              <Label>District</Label>
+              <Label className='pb-3'>District</Label>
               <Select value={formData.district_id} onValueChange={(v) => setField('district_id', v)} disabled={!districts.length}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select District" />
@@ -324,51 +409,51 @@ export default function CreateClientPage() {
               </Select>
             </div>
 
-          <div>
-  <Label>Pincode</Label>
-  <Select
-    value={formData.postal_code}
-    onValueChange={(v) => setField('postal_code', v)}
-    disabled={!pincodes.length}
-  >
-    <SelectTrigger className="w-full">
-      <SelectValue placeholder="Select Pincode" />
-    </SelectTrigger>
+            <div>
+              <Label className='pb-3'>Pincode</Label>
+              <Select
+                value={formData.postal_code}
+                onValueChange={(v) => setField('postal_code', v)}
+                disabled={!pincodes.length}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select Pincode" />
+                </SelectTrigger>
 
-    <SelectContent className="max-h-60 overflow-auto">
-      <Input
-        type="text"
-        placeholder="Search pincode..."
-        className="mb-2 px-2 py-1 w-full border rounded"
-        onChange={(e) => {
-          const search = e.target.value.toLowerCase();
-          setPincodes((prev) =>
-            prev.map((p: any) => ({
-              ...p,
-              hidden: !p.pincode.toLowerCase().includes(search),
-            }))
-          );
-        }}
-      />
-      {pincodes
-        .filter((p) => !p.hidden)
-        .map((p) => (
-          <SelectItem key={`pincode-${p.pincode}`} value={p.pincode}>
-            {p.pincode}
-          </SelectItem>
-        ))}
-    </SelectContent>
-  </Select>
-</div>
+                <SelectContent className="max-h-60 overflow-auto">
+                  <Input
+                    type="text"
+                    placeholder="Search pincode..."
+                    className="mb-2 px-2 py-1 w-full border rounded"
+                    onChange={(e) => {
+                      const search = e.target.value.toLowerCase();
+                      setPincodes((prev) =>
+                        prev.map((p) => ({
+                          ...p,
+                          hidden: !p.pincode.toLowerCase().includes(search),
+                        }))
+                      );
+                    }}
+                  />
+                  {pincodes
+                    .filter((p) => !p.hidden)
+                    .map((p) => (
+                      <SelectItem key={`pincode-${p.pincode}`} value={p.pincode}>
+                        {p.pincode}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
 
 
             <div>
-              <Label>Latitude</Label>
+              <Label className='pb-3'>Latitude</Label>
               <Input value={formData.lat} readOnly />
             </div>
 
             <div>
-              <Label>Longitude</Label>
+              <Label className='pb-3'>Longitude</Label>
               <Input value={formData.lng} readOnly />
             </div>
           </div>
@@ -379,11 +464,11 @@ export default function CreateClientPage() {
           <legend className="text-lg font-medium">Available Time</legend>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label>Visiting Start Time</Label>
+              <Label className='pb-3'>Visiting Start Time</Label>
               <Input type="time" value={formData.visiting_startTime} onChange={(e) => setField('visiting_startTime', e.target.value)} />
             </div>
             <div>
-              <Label>Visiting End Time</Label>
+              <Label className='pb-3'>Visiting End Time</Label>
               <Input type="time" value={formData.visiting_endTime} onChange={(e) => setField('visiting_endTime', e.target.value)} />
             </div>
           </div>
@@ -394,7 +479,7 @@ export default function CreateClientPage() {
           <Button variant="destructive" onClick={() => router.push('/client')}>
             Cancel
           </Button>
-          <Button onClick={handleSave}>Create</Button>
+          <Button onClick={handleSave} style={{ backgroundColor: primaryColor, color: '#fff' }}>Create</Button>
         </div>
       </Card>
     </div>

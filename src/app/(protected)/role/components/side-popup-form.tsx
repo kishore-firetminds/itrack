@@ -7,32 +7,38 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { X, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import React from 'react';
+import { Textarea } from '@/components/ui/textarea';
 
 export type FormField =
-  | { key: string; label: string; type: 'text'; required?: boolean }
-  | { key: string; label: string; type: 'toggle' };
+  | { key: string; label: string; type: 'text'; required?: boolean; disabled?: boolean; readonly?: boolean }
+  | { key: string; label: string; type: 'textarea'; required?: boolean; disabled?: boolean; readonly?: boolean }
+  | { key: string; label: string; type: 'toggle'; required?: boolean; disabled?: boolean; readonly?: boolean }
+  | { key: string; label: string; type: 'select'; required?: boolean; disabled?: boolean; readonly?: boolean };
 
-type SidePopupFormProps = {
+interface SidePopupFormProps {
   isOpen: boolean;
   onClose: () => void;
-  title: string;
+  title?: string;
   fields: FormField[];
-  defaultValues?: Record<string, any>;
-  onSubmit: (data: Record<string, any>) => void;
-};
+  defaultValues?: Record<string, unknown>;
+  onSubmit?: (data: Record<string, unknown>) => void;
+  companies?: { company_id: string; name: string }[];
+}
 
 export function SidePopupForm({
   isOpen,
   onClose,
-  title,
+  title = 'Add New Entry',
   fields,
-  defaultValues = {},
+  defaultValues,
   onSubmit,
+  companies = [],
 }: SidePopupFormProps) {
-  const [formValues, setFormValues] = useState<Record<string, any>>(defaultValues);
+  const [formValues, setFormValues] = useState<Record<string, any>>(defaultValues ?? {});
 
   useEffect(() => {
-    if (isOpen) setFormValues(defaultValues);
+    if (isOpen) setFormValues(defaultValues ?? {});
   }, [isOpen, defaultValues]);
 
   const handleChange = (key: string, value: any) => {
@@ -41,7 +47,7 @@ export function SidePopupForm({
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formValues);
+    onSubmit && onSubmit(formValues);
   };
 
   if (!isOpen) return null;
@@ -87,9 +93,25 @@ export function SidePopupForm({
               {field.type === 'text' && (
                 <Input
                   id={field.key}
-                  value={formValues[field.key] ?? ''}
-                  onChange={(e) => handleChange(field.key, e.target.value)}
+                  type="text"
+                  value={typeof formValues[field.key] === 'string' || typeof formValues[field.key] === 'number' ? String(formValues[field.key]) : ''}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange(field.key, e.target.value)}
+                  className="w-full"
                   required={field.required}
+                  disabled={field.disabled}
+                  readOnly={field.readonly}
+                />
+              )}
+
+              {field.type === 'textarea' && (
+                <Textarea
+                  id={field.key}
+                  value={typeof formValues[field.key] === 'string' || typeof formValues[field.key] === 'number' ? String(formValues[field.key]) : ''}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleChange(field.key, e.target.value)}
+                  className="w-full min-h-24 resize-none"
+                  rows={4}
+                  disabled={field.disabled}
+                  readOnly={field.readonly}
                 />
               )}
 
@@ -110,6 +132,24 @@ export function SidePopupForm({
                     )}
                   />
                 </div>
+              )}
+
+              {field.type === 'select' && (
+                <select
+                  id={field.key}
+                  value={typeof formValues[field.key] === 'string' || typeof formValues[field.key] === 'number' ? String(formValues[field.key]) : ''}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleChange(field.key, e.target.value)}
+                  className="w-full border rounded px-2 py-1"
+                  required={field.required}
+                  disabled={field.disabled}
+                >
+                  <option value="">Select {field.label}</option>
+                  {companies.map((c) => (
+                    <option key={c.company_id} value={c.company_id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
               )}
             </div>
           ))}

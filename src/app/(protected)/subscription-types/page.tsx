@@ -2,7 +2,6 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/store/store';
 import api from '@/utils/api';
@@ -14,12 +13,8 @@ import { Card } from '@/components/ui/card';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table';
-import { Search, Calendar as CalendarIcon, LoaderCircle, Pencil, X } from 'lucide-react';
+import { Search, LoaderCircle, Pencil, X } from 'lucide-react';
 import { CustomPagination } from '@/app/components/Pagination';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
-import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
 import { SidePopupForm, FormField } from './components/side-popup-form';
 
 /* ===================================================
@@ -46,17 +41,9 @@ const PAGE_SIZE = 10;
    📌 Component
 =================================================== */
 export default function SubscriptionTypesPage() {
-  const router = useRouter();
-
   /* ---------- Redux Data ---------- */
-  const primaryColor = useSelector((s: RootState) => s.ui.primaryColor);
+  const primaryColor = useSelector((s: RootState) => s.ui.primaryColor) ?? '#4F46E5';
   const permissions = useSelector((s: RootState) => s.permissions.list);
-
-  /* ---------- Permissions ---------- */
-  // const SCREEN = 'Subscription Type';
-  // const canView = permissions.some((p) => p.screen === SCREEN && p.view);
-  // const canEdit = permissions.some((p) => p.screen === SCREEN && p.edit);
-  // const canAdd = permissions.some((p) => p.screen === SCREEN && p.add);
 
   /* ---------- States ---------- */
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -132,7 +119,7 @@ export default function SubscriptionTypesPage() {
   /* ===================================================
      📌 Filtering
   =================================================== */
-  const filteredRows = useMemo(() => {
+  const filteredRows: SubscriptionRow[] = useMemo(() => {
     const text = searchText.trim().toLowerCase();
     return rows.filter((r) =>
       !text || r.subscription_title.toLowerCase().includes(text)
@@ -154,10 +141,10 @@ export default function SubscriptionTypesPage() {
   /* ===================================================
      📌 Form Submit
   =================================================== */
-  const handleFormSubmit = async (data: Record<string, any>) => {
+  const handleFormSubmit = async (data: Record<string, unknown>) => {
     const payload = {
-      subscription_title: data.subscription_title,
-      subscription_status: !!data.subscription_status, // boolean
+      subscription_title: String(data.subscription_title ?? ''),
+      subscription_status: !!data.subscription_status,
     };
     try {
       if (editData) {
@@ -174,8 +161,8 @@ export default function SubscriptionTypesPage() {
     }
   };
 
-   const ApiErrors = (err: any) => {
-      const status = err?.response?.status;
+   const ApiErrors = (err: unknown) => {
+      const status = (err as { response?: { status?: number } })?.response?.status;
     
       if (status === 404) {
         toast.error("Subscription Type not found. It may have already been deleted.");
@@ -287,7 +274,7 @@ export default function SubscriptionTypesPage() {
 
           {/* Filter / Clear Buttons */}
           <div className="flex gap-4 justify-end">
-            <Button onClick={onApplyFilters} className="rounded-full flex gap-2">Filter</Button>
+            <Button onClick={onApplyFilters}   style={{ backgroundColor: primaryColor, color: '#fff' }} className="rounded-full flex gap-2">Filter</Button>
             <Button variant="outline" className="rounded-full" onClick={onClearFilters}>Clear</Button>
           </div>
         </div>
@@ -311,8 +298,8 @@ export default function SubscriptionTypesPage() {
                   </TableCell>
                 </TableRow>
               )}
-              {filteredRows.map((s, i) => (
-                <TableRow key={s.subscription_id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} `}>
+              {filteredRows.map((s: SubscriptionRow, i: number) => (
+                <TableRow key={String(s.subscription_id)} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} `}>
                   <TableCell className="text-center">{(currentPage - 1) * PAGE_SIZE + (i + 1)}</TableCell>
                   <TableCell>{s.subscription_title}</TableCell>
                   <TableCell className="text-center">

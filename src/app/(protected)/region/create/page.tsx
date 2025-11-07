@@ -18,6 +18,15 @@ import api from '@/utils/api';
 import { URLS } from '@/utils/urls';
 import { useRouter } from 'next/navigation';
 import { toast } from "sonner";
+type RegionForm = {
+  region_name: string;
+  company_id: string;
+  country_id: string;
+  state_id: string;
+  district_id: string;
+  active: boolean;
+};
+
 export default function CreateRegionPage() {
   const primaryColor = useSelector((state: RootState) => state.ui.primaryColor);
   const router = useRouter();
@@ -33,7 +42,7 @@ export default function CreateRegionPage() {
   const [user, setUser] = useState<any>(null);
 const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<RegionForm>({
     region_name: '',
     company_id: '',
     country_id: '',
@@ -59,11 +68,16 @@ const [isSuperAdmin, setIsSuperAdmin] = useState(false);
         setStates(statesRes.data?.data ?? []);
         setAllDistricts(districtsRes.data?.data ?? []);
         setAllPincodes(
-          pincodesRes.data?.data?.map((p: any) => ({
-            pincode: p.pincode,
-            district_id: p.district_id,
-            assigned: p.assigned || false,
-          })) ?? []
+          (pincodesRes.data?.data ?? []).map((p: any) => {
+            const rawAssigned = p?.assigned;
+            const assigned =
+              rawAssigned === true || rawAssigned === 'true' || rawAssigned === 1 || rawAssigned === '1';
+            return {
+              pincode: p.pincode,
+              district_id: p.district_id,
+              assigned: Boolean(assigned),
+            };
+          })
         );
       } catch (err) {
         console.error('Error fetching data', err);
@@ -72,12 +86,12 @@ const [isSuperAdmin, setIsSuperAdmin] = useState(false);
     fetchData();
   }, []);
 
-  const handleChange = (field: string, value: any) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+  const handleChange = (field: keyof RegionForm, value: unknown) => {
+    setFormData((prev) => ({ ...prev, [field]: value as any }));
 
     if (field === 'state_id') {
       const filteredDistricts = allDistricts
-        .filter((d) => d.state_id.toString() === value.toString())
+        .filter((d) => String(d.state_id) === String(value))
         .map((d) => ({ district_id: d.district_id, district_name: d.district_name }));
       setDistricts(filteredDistricts);
       setFormData((prev) => ({ ...prev, district_id: '' }));
@@ -87,7 +101,7 @@ const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
     if (field === 'district_id') {
       const filteredPincodes = allPincodes
-        .filter((p) => p.district_id.toString() === value.toString() && !p.assigned)
+        .filter((p) => String(p.district_id) === String(value) && !Boolean(p.assigned))
         .map((p) => p.pincode);
 
       setAvailablePincodes(filteredPincodes);
@@ -95,8 +109,8 @@ const [isSuperAdmin, setIsSuperAdmin] = useState(false);
     }
   };
 
-  const toggleField = (key: string) => {
-    setFormData((prev) => ({ ...prev, [key]: !prev[key] }));
+  const toggleField = (key: keyof RegionForm) => {
+    setFormData((prev) => ({ ...prev, [key]: !(prev[key] as boolean) }));
   };
 
   const togglePincode = (pin: string) => {

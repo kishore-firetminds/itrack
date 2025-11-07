@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Search, LoaderCircle, Pencil } from 'lucide-react';
+import { Search, LoaderCircle, Pencil, X } from 'lucide-react';
 import { CustomPagination } from '@/app/components/Pagination';
 import { SidePopupForm, FormField } from './components/side-popup-form';
 
@@ -36,11 +36,10 @@ type Company = { company_id: string; name: string };
 const PAGE_SIZE = 10;
 
 export default function ShiftPage() {
-  const primaryColor = useSelector((s: RootState) => s.ui.primaryColor);
+  const primaryColor = useSelector((s: RootState) => s.ui.primaryColor) ?? '#4F46E5';
   const permissions = useSelector((s: RootState) => s.permissions.list);
 
   const SCREEN = 'Shift';
-  const canView = permissions.some((p) => p.screen === SCREEN && p.view);
   const canEdit = permissions.some((p) => p.screen === SCREEN && p.edit);
   const canAdd = permissions.some((p) => p.screen === SCREEN && p.add);
 
@@ -85,37 +84,27 @@ export default function ShiftPage() {
 
 
 
-
-  // Fetch companies
-  useEffect(() => {
-    api.get<{ data: Company[] }>(URLS.GET_COMPANIES)
-      .then(res => setCompanies(res.data?.data || []))
-      .catch(err => console.error('Failed to fetch companies', err));
-  }, []);
-
-  
-
   // Server params
   const buildServerParams = useCallback(() => ({ page: currentPage, limit: PAGE_SIZE, search: searchText }), [currentPage, searchText]);
 
   // Fetch shifts
   const fetchShiftList = useCallback(async () => {
-    setLoading(true);
-    if (abortRef.current) abortRef.current.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
+     setLoading(true);
+     if (abortRef.current) abortRef.current.abort();
+     const controller = new AbortController();
+     abortRef.current = controller;
 
-    try {
-      const res = await api.get<PaginatedShifts>(URLS.GET_SHIFT, { params: buildServerParams(), signal: controller.signal });
-      setRows(res.data?.data ?? []);
-      setTotal(res.data?.total ?? 0);
-    } catch (err) {
-      setRows([]);
-      setTotal(0);
-    } finally {
-      setLoading(false);
-    }
-  }, [buildServerParams]);
+     try {
+       const res = await api.get<PaginatedShifts>(URLS.GET_SHIFT, { params: buildServerParams(), signal: controller.signal });
+       setRows(res.data?.data ?? []);
+       setTotal(res.data?.total ?? 0);
+     } catch (err) {
+       setRows([]);
+       setTotal(0);
+     } finally {
+       setLoading(false);
+     }
+   }, [buildServerParams]);
 
   useEffect(() => { fetchShiftList(); }, [fetchShiftList]);
 
@@ -125,32 +114,30 @@ export default function ShiftPage() {
   }, [rows, searchText]);
 
 
-   const ApiErrors = (err: any) => {
-      const status = err?.response?.status;
-    
-      if (status === 404) {
-        toast.error("Shift not found. It may have already been deleted.");
-      } else if (status === 403) {
-        toast.error("You don't have permission to delete this Shift.");
-      } else if (status === 409) {
-          toast.error("Shift already exists. Please use a different name.");
-      } else {
-        toast.error("Failed to delete Shift. Please try again.");
-      }
-    };
-  
-  
-  
+  const ApiErrors = (err: unknown) => {
+    const status = (err as { response?: { status?: number } })?.response?.status;
+
+    if (status === 404) {
+      toast.error("Shift not found. It may have already been deleted.");
+    } else if (status === 403) {
+      toast.error("You don't have permission to delete this Shift.");
+    } else if (status === 409) {
+      toast.error("Shift already exists. Please use a different name.");
+    } else {
+      toast.error("Failed to delete Shift. Please try again.");
+    }
+  };
 
 
-  const handleFormSubmit = async (data: Record<string, any>) => {
+
+  const handleFormSubmit = async (data: Record<string, unknown>) => {
     const payload = {
-      company_id: isSuperAdmin ? data.company_id : user?.company_id,
-      shift_name: data.shift_name,
-      shift_startTime: data.shift_startTime,
-      shift_endTime: data.shift_endTime,
-      description: data.description,
-      status: data.status === 'active',
+      company_id: isSuperAdmin ? String(data.company_id ?? '') : (user as any)?.company_id,
+      shift_name: String(data.shift_name ?? ''),
+      shift_startTime: String(data.shift_startTime ?? ''),
+      shift_endTime: String(data.shift_endTime ?? ''),
+      description: String(data.description ?? ''),
+      status: (data.status === 'active') || Boolean(data.status),
     };
 
     try {
@@ -161,13 +148,13 @@ export default function ShiftPage() {
       setEditData(null);
       fetchShiftList();
       toast.success("Shift saved successfully.");
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Error saving Shift', err);
       ApiErrors(err);
     }
   };
 
- 
+
 
   const ShiftActions = (s: ShiftRow) => (
     <div className="flex gap-2 justify-center">
@@ -189,19 +176,23 @@ export default function ShiftPage() {
         style={{ borderColor: 'red', color: 'red' }}
         onClick={() => { setDeleteId(s.shift_id); setIsDeleteOpen(true); }}
       >
-        X
+        <X className="w-4 h-4" />
       </Button>
     </div>
   );
 
-  const shiftFields: FormField[] = [
-   ...(isSuperAdmin ? [{ key: 'company_id', label: 'Company', type: 'select', required: true }] : []),
-    { key: "shift_name", label: "Shift Name", type: "text", required: true },
-    { key: "shift_startTime", label: "Start Time", type: "time", required: true },
-    { key: "shift_endTime", label: "End Time", type: "time", required: true },
-    { key: "description", label: "Description", type: "textarea" },
-    { key: "status", label: "Status", type: "toggle" },
-  ];
+  const shiftFields: FormField[] = (() => {
+    const f: FormField[] = [];
+    if (isSuperAdmin) f.push({ key: 'company_id', label: 'Company', type: 'select', required: true });
+    f.push(
+      { key: 'shift_name', label: 'Shift Name', type: 'text', required: true },
+      { key: 'shift_startTime', label: 'Start Time', type: 'time', required: true },
+      { key: 'shift_endTime', label: 'End Time', type: 'time', required: true },
+      { key: 'description', label: 'Description', type: 'textarea' },
+      { key: 'status', label: 'Status', type: 'toggle' }
+    );
+    return f;
+  })();
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -234,7 +225,7 @@ export default function ShiftPage() {
           </div>
 
           <div className="flex gap-4 justify-end">
-            <Button onClick={() => { setCurrentPage(1); fetchShiftList(); }} className="rounded-full flex gap-2">Filter</Button>
+            <Button onClick={() => { setCurrentPage(1); fetchShiftList(); }}  style={{ backgroundColor: primaryColor, color: '#fff' }} className="rounded-full flex gap-2">Filter</Button>
             <Button variant="outline" className="rounded-full" onClick={() => { setSearchText(''); setCurrentPage(1); fetchShiftList(); }}>Clear</Button>
           </div>
         </div>
@@ -261,7 +252,7 @@ export default function ShiftPage() {
                 </TableRow>
               )}
               {filteredRows.map((s, i) => {
-                const company = companies.find(c => c.company_id === s.company_id)?.name || '-';
+                const company = companies.find(c => String(c.company_id) === String(s.company_id))?.name || '-';
                 const rowKey = s.shift_id ? `shift-${s.shift_id}` : `row-${i}`;
                 return (
                   <TableRow key={rowKey} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
@@ -298,8 +289,8 @@ export default function ShiftPage() {
           shift_startTime: editData.shift_startTime,
           shift_endTime: editData.shift_endTime,
           description: editData.description,
-          status: editData.status ? 'active' : 'inactive',
-        } : undefined}
+          status: Boolean(editData.status),
+        } : { status: false }}
         onSubmit={handleFormSubmit}
         companies={companies}
       />

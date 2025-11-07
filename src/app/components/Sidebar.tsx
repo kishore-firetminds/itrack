@@ -182,7 +182,7 @@ const Sidebar = ({
       'Work Type',
       'Job Type',
       'Region',
-      'Company',
+      // 'Company',
       'Vendor',
       'User',
       'Client',

@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/utils/api';
 import { URLS } from '@/utils/urls';
-
+import { useSelector } from 'react-redux';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input'; // ✅ Added Input import
@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/table';
 import { Pencil, Trash, Search } from 'lucide-react';
 import { CustomPagination } from '@/app/components/Pagination';
-
+import type { RootState } from '@/store/store';
 type CompanyRow = {
   company_id: string;
   name: string;
@@ -44,7 +44,9 @@ export default function CompaniesPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [searchText, setSearchText] = useState('');
-
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const primaryColor = useSelector((s: RootState) => s.ui.primaryColor) ?? '#4F46E5';
   const fetchCompanies = useCallback(async () => {
     setLoading(true);
     try {
@@ -66,13 +68,22 @@ export default function CompaniesPage() {
     fetchCompanies();
   }, [fetchCompanies]);
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this company?')) return;
+  const handleDelete = (id: string) => {
+    setDeleteId(id);
+    setIsDeleteOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteId) return;
     try {
-      await api.delete(`${URLS.GET_COMPANIES}/${id}`);
+      await api.delete(`${URLS.GET_COMPANIES}/${deleteId}`);
+      setIsDeleteOpen(false);
+      setDeleteId(null);
       fetchCompanies();
     } catch (err) {
       console.error('Delete failed', err);
+      setIsDeleteOpen(false);
+      setDeleteId(null);
     }
   };
 
@@ -97,6 +108,7 @@ export default function CompaniesPage() {
         <h1 className="text-2xl font-semibold text-gray-800">Companies</h1>
         <Button
           className="rounded-3xl"
+           style={{ backgroundColor: primaryColor, color: '#fff' }}
           onClick={() => router.push('/company/create')}
         >
           Create
@@ -116,7 +128,7 @@ export default function CompaniesPage() {
             />
           </div>
           <div className="flex gap-2">
-            <Button onClick={() => setCurrentPage(1)} className="rounded-full">Filter</Button>
+            <Button onClick={() => setCurrentPage(1)}  style={{ backgroundColor: primaryColor, color: '#fff' }} className="rounded-full">Filter</Button>
             <Button variant="outline" onClick={() => { setSearchText(''); setCurrentPage(1); }} className="rounded-full">Clear</Button>
           </div>
         </div>
@@ -202,6 +214,20 @@ export default function CompaniesPage() {
           />
         </div>
       </Card>
+
+      {/* Delete Confirmation Popup */}
+      {isDeleteOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+            <div className="bg-white rounded-xl p-6 w-80 space-y-4 shadow-lg">
+              <h2 className="text-lg font-semibold text-gray-800">Delete Company</h2>
+              <p className="text-gray-600">Are you sure you want to delete this company?</p>
+              <div className="flex justify-end gap-3">
+                <Button variant="outline" onClick={() => { setIsDeleteOpen(false); setDeleteId(null); }}>Cancel</Button>
+                <Button variant="destructive" onClick={confirmDelete}>Delete</Button>
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   );
 }

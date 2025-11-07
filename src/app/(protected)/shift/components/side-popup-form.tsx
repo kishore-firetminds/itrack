@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { X, Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export type FormField =
   | { key: string; label: string; type: 'text'; required?: boolean }
@@ -33,34 +34,36 @@ export function SidePopupForm({
   onSubmit,
   companies = [],
 }: SidePopupFormProps) {
-  const [formData, setFormData] = useState<Record<string, any>>({});
+  const normalizeDefaults = (vals?: Record<string, unknown>) => {
+    if (!vals) return {} as Record<string, any>;
+    const out: Record<string, any> = {};
+    Object.keys(vals).forEach((k) => {
+      const v = vals[k];
+      if (v === 'active' || v === 'true' || v === 1 || v === '1') out[k] = true;
+      else if (v === 'inactive' || v === 'false' || v === 0 || v === '0') out[k] = false;
+      else out[k] = v;
+    });
+    return out;
+  };
+
+  const [formValues, setFormValues] = useState<Record<string, any>>(normalizeDefaults(defaultValues));
 
   useEffect(() => {
-    const initialData: Record<string, any> = {};
-    fields.forEach((field) => {
-      if (field.type === 'toggle') initialData[field.key] = 'active';
-      else initialData[field.key] = '';
-    });
-    if (defaultValues) {
-      Object.keys(defaultValues).forEach((k) => {
-        initialData[k] = defaultValues[k];
-      });
-    }
-    setFormData(initialData);
-  }, [defaultValues, fields, isOpen]);
+    if (isOpen) setFormValues(normalizeDefaults(defaultValues));
+  }, [isOpen, defaultValues]);
 
   const handleChange = (key: string, value: any) =>
-    setFormData((prev) => ({ ...prev, [key]: value }));
+    setFormValues((prev) => ({ ...prev, [key]: value }));
 
   const toggleField = (key: string) =>
-    setFormData((prev) => ({
+    setFormValues((prev) => ({
       ...prev,
       [key]: prev[key] === 'active' ? 'inactive' : 'active',
     }));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit && onSubmit(formData);
+    onSubmit && onSubmit(formValues);
   };
 
   if (!isOpen) return null;
@@ -96,7 +99,7 @@ export function SidePopupForm({
               <Button
                 type="submit"
                 size="sm"
-                onClick={handleSubmit}
+                onClick={handleFormSubmit}
                 className="h-8 w-8 p-0 rounded-full bg-green-600 hover:bg-green-700"
               >
                 <Check />
@@ -107,7 +110,7 @@ export function SidePopupForm({
           {/* Body */}
           <form
             className="flex-1 flex flex-col p-6 space-y-6 overflow-y-auto"
-            onSubmit={handleSubmit}
+            onSubmit={handleFormSubmit}
           >
             {fields.map((field) => {
               // Special case: render start & end time side by side
@@ -131,7 +134,7 @@ export function SidePopupForm({
                     <Input
                       id={field.key}
                       type="text"
-                      value={formData[field.key] || ''}
+                      value={formValues[field.key] || ''}
                       onChange={(e) => handleChange(field.key, e.target.value)}
                       className="w-full"
                       required={field.required}
@@ -141,7 +144,7 @@ export function SidePopupForm({
                   {field.type === 'textarea' && (
                     <Textarea
                       id={field.key}
-                      value={formData[field.key] || ''}
+                      value={formValues[field.key] || ''}
                       onChange={(e) => handleChange(field.key, e.target.value)}
                       className="w-full min-h-24 resize-none"
                       rows={4}
@@ -149,36 +152,26 @@ export function SidePopupForm({
                   )}
 
                   {field.type === 'toggle' && (
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => toggleField(field.key)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          formData[field.key] === 'active'
-                            ? 'bg-green-600'
-                            : 'bg-gray-200'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            formData[field.key] === 'active'
-                              ? 'translate-x-6'
-                              : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
-                      <span className="text-sm text-card-foreground font-medium">
-                        {formData[field.key] === 'active'
-                          ? 'Active'
-                          : 'Inactive'}
-                      </span>
+                    <div
+                      onClick={() => handleChange(field.key, !Boolean(formValues[field.key]))}
+                      className={cn(
+                        'w-12 h-6 flex items-center rounded-full p-1 cursor-pointer',
+                        Boolean(formValues[field.key]) ? 'bg-green-500' : 'bg-gray-300'
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          'bg-white w-4 h-4 rounded-full shadow-md transform duration-300',
+                          Boolean(formValues[field.key]) ? 'translate-x-6' : ''
+                        )}
+                      />
                     </div>
                   )}
 
                   {field.type === 'select' && (
                     <select
                       id={field.key}
-                      value={formData[field.key] || ''}
+                      value={formValues[field.key] || ''}
                       onChange={(e) => handleChange(field.key, e.target.value)}
                       className="w-full border rounded px-2 py-1"
                       required={field.required}
@@ -208,7 +201,7 @@ export function SidePopupForm({
                 <Input
                   type="time"
                   id="shift_startTime"
-                  value={formData['shift_startTime'] || ''}
+                  value={formValues['shift_startTime'] || ''}
                   onChange={(e) => handleChange('shift_startTime', e.target.value)}
                   className="w-full"
                   required
@@ -225,7 +218,7 @@ export function SidePopupForm({
                 <Input
                   type="time"
                   id="shift_endTime"
-                  value={formData['shift_endTime'] || ''}
+                  value={formValues['shift_endTime'] || ''}
                   onChange={(e) => handleChange('shift_endTime', e.target.value)}
                   className="w-full"
                   required

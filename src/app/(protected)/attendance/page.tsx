@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { format } from 'date-fns';
 import api from '@/utils/api';
 import { URLS } from '@/utils/urls';
@@ -46,6 +46,13 @@ type Company = {
   name: string;
 };
 
+interface AttendanceParams {
+  page: number;
+  limit: number;
+  from?: string;
+  to?: string;
+}
+
 export default function AttendanceListPage() {
   const [attendances, setAttendances] = useState<AttendanceRow[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -58,7 +65,7 @@ export default function AttendanceListPage() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   // Fetch users
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       const res = await api.get(URLS.GET_USER);
       console.log('Users API:', res.data);
@@ -74,10 +81,10 @@ export default function AttendanceListPage() {
       console.error('Error fetching users:', err);
       setUsers([]);
     }
-  };
+  }, []);
 
   // Fetch companies
-  const fetchCompanies = async () => {
+  const fetchCompanies = useCallback(async () => {
     try {
       const res = await api.get(URLS.GET_COMPANIES);
       console.log('Companies API:', res.data);
@@ -93,13 +100,13 @@ export default function AttendanceListPage() {
       console.error('Error fetching companies:', err);
       setCompanies([]);
     }
-  };
+  }, []);
 
   // Fetch attendance
-  const fetchAttendance = async () => {
+  const fetchAttendance = useCallback(async () => {
     setLoading(true);
     try {
-      const params: any = { page: currentPage, limit: PAGE_SIZE };
+      const params: AttendanceParams = { page: currentPage, limit: PAGE_SIZE };
       if (pickedDate) {
         const start = new Date(pickedDate);
         start.setHours(0, 0, 0, 0);
@@ -127,7 +134,7 @@ export default function AttendanceListPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, pickedDate]);
 
   // Build lookup maps
   const userMap = useMemo(() => {
@@ -152,11 +159,11 @@ export default function AttendanceListPage() {
   useEffect(() => {
     fetchUsers();
     fetchCompanies();
-  }, []);
+  }, [fetchUsers, fetchCompanies]);
 
   useEffect(() => {
     fetchAttendance();
-  }, [currentPage, pickedDate]);
+  }, [fetchAttendance]);
 
   return (
     <div className="space-y-6">

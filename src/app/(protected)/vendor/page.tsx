@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/utils/api';
 import { URLS } from '@/utils/urls';
-
+import { useSelector } from 'react-redux';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input'; // ✅ Added Input import
@@ -16,14 +16,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { toast } from "sonner";
 import { Pencil, Trash, Search } from 'lucide-react';
 import { CustomPagination } from '@/app/components/Pagination';
-
+import type { RootState } from '@/store/store';
 type VendorRow = {
   vendor_id: string;
   vendor_name: string;
   phone: string;
   role_id: string;
+  city?: string;
   region: string;
 };
 
@@ -49,7 +51,9 @@ export default function VendorsPage() {
   const [total, setTotal] = useState(0);
   const [roles, setRoles] = useState<Record<string, string>>({}); 
   const [searchText, setSearchText] = useState('');
-
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+   const primaryColor = useSelector((s: RootState) => s.ui.primaryColor) ?? '#4F46E5';
   const fetchVendors = useCallback(async () => {
     setLoading(true);
     try {
@@ -89,13 +93,26 @@ export default function VendorsPage() {
     fetchVendors();
   }, [fetchVendors]);
 
+  // open confirmation popup
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this vendor?')) return;
+    setDeleteId(id);
+    setIsDeleteOpen(true);
+  };
+
+  // perform delete after user confirms
+  const confirmDelete = async () => {
+    if (!deleteId) return;
     try {
-      await api.delete(`${URLS.DELETE_VENDOR.replace('{id}', id)}`);
+      await api.delete(`${URLS.DELETE_VENDOR.replace('{id}', deleteId)}`);
+      toast.success('Vendor deleted successfully.');
       fetchVendors();
     } catch (err) {
       console.error('Delete failed', err);
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || (err as Error).message || 'Failed to delete vendor.';
+      toast.error(msg);
+    } finally {
+      setIsDeleteOpen(false);
+      setDeleteId(null);
     }
   };
 
@@ -106,6 +123,7 @@ export default function VendorsPage() {
       !text ||
       v.vendor_name.toLowerCase().includes(text) ||
       v.phone.includes(text) ||
+      (v.city ?? '').toLowerCase().includes(text) ||
       (roles[v.role_id]?.toLowerCase() || '').includes(text) ||
       (v.region || '').toLowerCase().includes(text)
     );
@@ -118,7 +136,7 @@ export default function VendorsPage() {
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-semibold text-gray-800">Vendors</h1>
         <Button
-          className="rounded-3xl"
+          className="rounded-3xl"  style={{ backgroundColor: primaryColor, color: '#fff' }}
           onClick={() => router.push('/vendor/create')}
         >
           Create
@@ -138,7 +156,7 @@ export default function VendorsPage() {
             />
           </div>
           <div className="flex gap-2">
-            <Button onClick={() => setCurrentPage(1)} className="rounded-full">Filter</Button>
+            <Button onClick={() => setCurrentPage(1)}  style={{ backgroundColor: primaryColor, color: '#fff' }} className="rounded-full">Filter</Button>
             <Button variant="outline" onClick={() => { setSearchText(''); setCurrentPage(1); }}  className="rounded-full">Clear</Button>
           </div>
         </div>
@@ -150,6 +168,7 @@ export default function VendorsPage() {
                 <TableHead className="text-center font-bold text-gray-800 ">S.No</TableHead>
                 <TableHead className="font-bold text-gray-800">Name</TableHead>
                 <TableHead className="font-bold text-gray-800">Phone</TableHead>
+                <TableHead className="font-bold text-gray-800">City</TableHead>
                 <TableHead className="font-bold text-gray-800">Role</TableHead>
                 <TableHead className="font-bold text-gray-800">Region</TableHead>
                 <TableHead className="text-center font-bold text-gray-800">Action</TableHead>
@@ -158,12 +177,12 @@ export default function VendorsPage() {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-6">Loading...</TableCell>
+                  <TableCell colSpan={7} className="text-center py-6">Loading...</TableCell>
                 </TableRow>
               )}
               {!loading && filteredVendors.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-6 text-gray-500">
+                  <TableCell colSpan={7} className="text-center py-6 text-gray-500">
                     No results found
                   </TableCell>
                 </TableRow>
@@ -173,6 +192,7 @@ export default function VendorsPage() {
                   <TableCell className="text-center">{(currentPage - 1) * PAGE_SIZE + idx + 1}</TableCell>
                   <TableCell className="font-medium">{v.vendor_name}</TableCell>
                   <TableCell>{v.phone || '-'}</TableCell>
+                  <TableCell>{v.city ?? '-'}</TableCell>
                   <TableCell>{roles[v.role_id] ?? '-'}</TableCell>
                   <TableCell>{v.region || '-'}</TableCell>
                   <TableCell className="text-center flex justify-center gap-2">
@@ -208,6 +228,20 @@ export default function VendorsPage() {
           />
         </div>
       </Card>
+
+      {/* Delete Confirmation Popup */}
+      {isDeleteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="bg-white rounded-xl p-6 w-80 space-y-4 shadow-lg">
+            <h2 className="text-lg font-semibold text-gray-800">Delete Vendor</h2>
+            <p className="text-gray-600">Are you sure you want to delete this vendor?</p>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => { setIsDeleteOpen(false); setDeleteId(null); }}>Cancel</Button>
+              <Button style={{ backgroundColor: 'red', color: '#fff' }} onClick={confirmDelete}>Delete</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
