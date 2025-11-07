@@ -49,7 +49,7 @@ export default function LoginPage() {
             </label>
             <input
               type="email"
-              placeholder="info@innodha.com"
+              placeholder="info@company.com"
               className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
