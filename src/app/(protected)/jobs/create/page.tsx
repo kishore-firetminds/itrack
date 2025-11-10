@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/store/store';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,7 @@ import { useRouter } from 'next/navigation';
 import api from '@/utils/api';
 import { URLS } from '@/utils/urls';
 
-/** ---------- Helpers ---------- */
+/* ---------- helpers ---------- */
 
 const nowTimeStr = () => {
   const d = new Date();
@@ -43,7 +43,21 @@ const clampNumStr = (val: string, min: number, max: number) => {
   return String(Math.min(max, Math.max(min, Math.trunc(n))));
 };
 
-/** ---------- Types ---------- */
+const minutesToParts = (minutes: number) => {
+  if (!minutes || minutes <= 0) {
+    return { days: '0', hours: '0', minutes: '0' };
+  }
+  const d = Math.floor(minutes / (24 * 60));
+  const h = Math.floor((minutes % (24 * 60)) / 60);
+  const m = minutes % 60;
+  return {
+    days: String(d),
+    hours: String(h),
+    minutes: String(m),
+  };
+};
+
+/* ---------- types ---------- */
 
 type Option = { value: string; label: string };
 type NatureItem = { id: string; name: string };
@@ -64,6 +78,8 @@ interface JobTypeBE {
   jobtype_name?: string;
   worktype_id?: string | number;
   status?: boolean;
+  estimated_duration?: number;
+  description?: string;
 }
 interface NatureOfWorkBE {
   now_id: string | number;
@@ -91,18 +107,18 @@ interface ApiEnvelope<T> {
 type FormData = {
   client: string;
   referenceNumber: string;
-  workType: string; // worktype_id
-  jobType: string; // jobtype_id
+  workType: string;
+  jobType: string;
   jobDescription: string;
   scheduleDate: Date | null;
-  scheduleTime: string; // HH:mm:ss
-  supervisor: string; // supervisor_id
-  natureOfWork: string; // now_id
+  scheduleTime: string;
+  supervisor: string;
+  natureOfWork: string;
   durationDays: string;
-  durationHours: string; // ≤ 24
-  durationMinutes: string; // ≤ 59
-  technician: string; // technician_id
-  companyId: string; // company_id
+  durationHours: string;
+  durationMinutes: string;
+  technician: string;
+  companyId: string;
 };
 
 type Technician = {
@@ -115,13 +131,12 @@ type Technician = {
 
 type CSSVars = React.CSSProperties & { ['--primary']?: string };
 
-/** ---------- Component ---------- */
+/* ---------- component ---------- */
 
 export default function CreateJobPage() {
   const primaryColor = useSelector((state: RootState) => state.ui.primaryColor);
   const router = useRouter();
 
-  // Safe read of currentUser from localStorage (client only)
   const [currentUser] = useState<any>(() => {
     try {
       if (typeof window === 'undefined') return null;
@@ -139,7 +154,7 @@ export default function CreateJobPage() {
   const [saving, setSaving] = useState(false);
 
   const [companyOpts, setCompanyOpts] = useState<Option[]>([]);
-  const [companyError, setCompanyError] = useState<string>('');
+  const [companyError, setCompanyError] = useState('');
 
   const [formData, setFormData] = useState<FormData>({
     client: '',
@@ -158,12 +173,16 @@ export default function CreateJobPage() {
     companyId: '',
   });
 
+  const [jobImage, setJobImage] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const [clientOpts, setClientOpts] = useState<Option[]>([]);
   const [workTypeOpts, setWorkTypeOpts] = useState<Option[]>([]);
   const [natureList, setNatureList] = useState<NatureItem[]>([]);
   const [supervisorOpts, setSupervisorOpts] = useState<Option[]>([]);
 
   const [jobTypeOpts, setJobTypeOpts] = useState<Option[]>([]);
+  const [jobTypeRaw, setJobTypeRaw] = useState<JobTypeBE[]>([]);
   const [jobTypeLoading, setJobTypeLoading] = useState(false);
 
   const [techLoading, setTechLoading] = useState(false);
@@ -182,15 +201,12 @@ export default function CreateJobPage() {
     router.push('/jobs');
   };
 
-  /** (Optional) fetch companies if you have an endpoint.
-   *  If not needed, you can remove this effect and pre-fill companyOpts from elsewhere.
-   */
+  /* --- fetch companies --- */
   useEffect(() => {
     if (!isSuperAdmin) return;
     let cancelled = false;
     (async () => {
       try {
-        // Replace with your own companies endpoint/URLS map
         const res = await api.get<
           ApiEnvelope<
             {
@@ -219,7 +235,7 @@ export default function CreateJobPage() {
     };
   }, [isSuperAdmin]);
 
-  // Init (base dropdowns)
+  /* --- base dropdowns --- */
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -261,6 +277,7 @@ export default function CreateJobPage() {
               },
             }),
           ]);
+
         if (cancelled) return;
 
         const clients = clientsRes.data?.data ?? [];
@@ -317,15 +334,15 @@ export default function CreateJobPage() {
     return () => {
       cancelled = true;
     };
-    // re-run when company changes (super admin flow)
   }, [formData.companyId]);
 
-  // Load Job Types on Work Type change
+  /* --- job types on workType change --- */
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setFormData((prev) => ({ ...prev, jobType: '' }));
       setJobTypeOpts([]);
+      setJobTypeRaw([]);
       if (!formData.workType) return;
       try {
         setJobTypeLoading(true);
@@ -342,6 +359,7 @@ export default function CreateJobPage() {
         );
         if (cancelled) return;
         const jobs = (res.data?.data ?? []) as JobTypeBE[];
+        setJobTypeRaw(jobs);
         setJobTypeOpts(
           jobs.map((j) => ({
             value: String(j.jobtype_id),
@@ -364,8 +382,8 @@ export default function CreateJobPage() {
     [clientOpts, formData.client]
   );
 
+  /* --- search technicians --- */
   const onSearchTechnicians = async () => {
-    // company validation for super admin
     if (isSuperAdmin && !formData.companyId) {
       setCompanyError('Please select a company first.');
       return;
@@ -415,7 +433,6 @@ export default function CreateJobPage() {
 
   const showTechTable = hasSearchedTechs && technicians.length > 0;
 
-  // duration clamps
   const onBlurHours = () =>
     setFormData((p) => ({
       ...p,
@@ -427,24 +444,30 @@ export default function CreateJobPage() {
       durationMinutes: clampNumStr(p.durationMinutes, 0, 59),
     }));
 
-  // NOTE: removed schedule (past-date) validation completely
-  const actionsDisabled =
-    saving ||
-    techLoading ||
-    (isSuperAdmin && !formData.companyId) ||
-    !formData.client ||
-    !formData.workType ||
-    !formData.scheduleDate ||
-    !formData.supervisor;
+  /* --- job type change → prefill duration --- */
+  const handleJobTypeChange = (jobtypeId: string) => {
+    setFormData((prev) => ({ ...prev, jobType: jobtypeId }));
+    const jt = jobTypeRaw.find(
+      (j) => String(j.jobtype_id) === String(jobtypeId)
+    );
+    if (jt && typeof jt.estimated_duration === 'number') {
+      const parts = minutesToParts(jt.estimated_duration);
+      setFormData((prev) => ({
+        ...prev,
+        durationDays: parts.days,
+        durationHours: parts.hours,
+        durationMinutes: parts.minutes,
+      }));
+    }
+  };
 
+  /* --- save --- */
   const handleSave = async () => {
-    // company validation for super admin
     if (isSuperAdmin && !formData.companyId) {
       setCompanyError('Please select a company to continue.');
       return;
     }
 
-    // final clamp before send
     const estimated_days = Number(
       clampNumStr(formData.durationDays || '0', 0, 365)
     );
@@ -460,27 +483,38 @@ export default function CreateJobPage() {
       formData.scheduleTime
     ).toISOString();
 
-    // Build EXACT payload keys requested
     const payload = {
-      // include company if your BE expects it for scoping
       company_id: formData.companyId || undefined,
       client_id: formData.client,
-      technician_id: formData.technician || null, // allow null if not selected yet
+      technician_id: formData.technician || null,
       supervisor_id: formData.supervisor,
       worktype_id: formData.workType,
-      jobtype_id: formData.jobType || null, // allow null if no job types
+      jobtype_id: formData.jobType || null,
       now_id: formData.natureOfWork || null,
       estimated_days,
       estimated_hours,
       estimated_minutes,
-      scheduledDateAndTime: scheduled, // ISO like "2025-08-20T10:30:00.000Z"
+      scheduledDateAndTime: scheduled,
       job_description: formData.jobDescription || '',
       reference_number: formData.referenceNumber || '',
     };
 
     try {
       setSaving(true);
-      await api.post('/jobs', payload);
+
+      if (jobImage) {
+        const fd = new FormData();
+        Object.entries(payload).forEach(([k, v]) => {
+          if (v !== undefined && v !== null) fd.append(k, String(v));
+        });
+        fd.append('job_photo', jobImage);
+        await api.post('/jobs', fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      } else {
+        await api.post('/jobs', payload);
+      }
+
       router.push('/jobs');
     } catch (e) {
       console.error('Failed to create job', e);
@@ -489,6 +523,17 @@ export default function CreateJobPage() {
     }
   };
 
+  const actionsDisabled =
+    saving ||
+    techLoading ||
+    (isSuperAdmin && !formData.companyId) ||
+    !formData.client ||
+    !formData.workType ||
+    !formData.scheduleDate ||
+    !formData.supervisor;
+
+  /* ---------- render ---------- */
+
   return (
     <div className="space-y-6">
       <h1 className="text-xl md:text-2xl font-semibold text-gray-800">
@@ -496,7 +541,7 @@ export default function CreateJobPage() {
       </h1>
 
       <Card className="p-4 md:p-6">
-        <div className="border-b">
+        <div className="border-b mb-4">
           <h3
             className="font-medium border-b-3 rounded-xs inline-block pb-1"
             style={{ color: primaryColor, borderColor: primaryColor }}
@@ -505,16 +550,17 @@ export default function CreateJobPage() {
           </h3>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-4">
-          {/* Company (only for super_admin) */}
+        {/* main form grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Company */}
           {isSuperAdmin && (
             <div className="w-full">
-              <Label className="pb-2">Company</Label>
+              <Label className="pb-2 block">Company</Label>
               <Select
                 value={formData.companyId}
                 onValueChange={(value) => handleChange('companyId', value)}
               >
-                <SelectTrigger className="w-auto md:w-full">
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select company" />
                 </SelectTrigger>
                 <SelectContent>
@@ -533,7 +579,7 @@ export default function CreateJobPage() {
 
           {/* Client */}
           <div className="w-full">
-            <Label className="pb-2">Select Client</Label>
+            <Label className="pb-2 block">Select Client</Label>
             <Select
               value={formData.client}
               onValueChange={(value) => handleChange('client', value)}
@@ -543,7 +589,7 @@ export default function CreateJobPage() {
                 (isSuperAdmin && !formData.companyId)
               }
             >
-              <SelectTrigger className="w-auto md:w-full">
+              <SelectTrigger className="w-full">
                 <SelectValue
                   placeholder={
                     isSuperAdmin && !formData.companyId
@@ -568,9 +614,10 @@ export default function CreateJobPage() {
           </div>
 
           {/* Reference Number */}
-          <div className="w-auto md:w-full">
-            <Label className="pb-2">Reference Number</Label>
+          <div className="w-full">
+            <Label className="pb-2 block">Reference Number</Label>
             <Input
+              className="w-full"
               value={formData.referenceNumber}
               onChange={(e) => handleChange('referenceNumber', e.target.value)}
               placeholder="#ID34324342"
@@ -578,8 +625,8 @@ export default function CreateJobPage() {
           </div>
 
           {/* Work Type */}
-          <div>
-            <Label className="pb-2">Work Type</Label>
+          <div className="w-full">
+            <Label className="pb-2 block">Work Type</Label>
             <Select
               value={formData.workType}
               onValueChange={(value) => handleChange('workType', value)}
@@ -589,7 +636,7 @@ export default function CreateJobPage() {
                 (isSuperAdmin && !formData.companyId)
               }
             >
-              <SelectTrigger className="w-auto md:w-full">
+              <SelectTrigger className="w-full">
                 <SelectValue
                   placeholder={
                     isSuperAdmin && !formData.companyId
@@ -608,17 +655,17 @@ export default function CreateJobPage() {
             </Select>
           </div>
 
-          {/* Job Type — filtered by Work Type */}
-          <div>
-            <Label className="pb-2">Job Type</Label>
+          {/* Job Type */}
+          <div className="w-full">
+            <Label className="pb-2 block">Job Type</Label>
             <Select
               value={formData.jobType}
-              onValueChange={(value) => handleChange('jobType', value)}
+              onValueChange={handleJobTypeChange}
               disabled={
                 jobTypeLoading || !formData.workType || jobTypeOpts.length === 0
               }
             >
-              <SelectTrigger className="w-auto md:w-full">
+              <SelectTrigger className="w-full">
                 <SelectValue
                   placeholder={
                     jobTypeLoading
@@ -642,9 +689,10 @@ export default function CreateJobPage() {
           </div>
 
           {/* Job Description */}
-          <div>
-            <Label className="pb-2">Job Description</Label>
+          <div className="w-full">
+            <Label className="pb-2 block">Job Description</Label>
             <Textarea
+              className="w-full"
               placeholder="Describe the job"
               rows={3}
               value={formData.jobDescription}
@@ -653,15 +701,15 @@ export default function CreateJobPage() {
           </div>
 
           {/* Estimated Duration */}
-          <div>
-            <Label className="pb-2">Estimated Duration</Label>
-            <div className="flex gap-2">
+          <div className="w-full">
+            <Label className="pb-2 block">Estimated Duration</Label>
+            <div className="flex gap-2 flex-wrap">
               <div>
                 <Label className="text-xs">Days</Label>
                 <Input
                   type="number"
                   placeholder="00"
-                  className="w-16"
+                  className="w-20"
                   value={formData.durationDays}
                   onChange={(e) => handleChange('durationDays', e.target.value)}
                   min={0}
@@ -672,7 +720,7 @@ export default function CreateJobPage() {
                 <Input
                   type="number"
                   placeholder="00"
-                  className="w-16"
+                  className="w-20"
                   value={formData.durationHours}
                   onChange={(e) =>
                     handleChange('durationHours', e.target.value)
@@ -687,7 +735,7 @@ export default function CreateJobPage() {
                 <Input
                   type="number"
                   placeholder="00"
-                  className="w-16"
+                  className="w-20"
                   value={formData.durationMinutes}
                   onChange={(e) =>
                     handleChange('durationMinutes', e.target.value)
@@ -700,9 +748,9 @@ export default function CreateJobPage() {
             </div>
           </div>
 
-          {/* Schedule (past allowed) */}
-          <div>
-            <Label className="pb-2">Schedule Date & Time</Label>
+          {/* Schedule */}
+          <div className="w-full">
+            <Label className="pb-2 block">Schedule Date & Time</Label>
             <div className="flex flex-col gap-2">
               <DatePickerWithInput
                 date={formData.scheduleDate ?? undefined}
@@ -728,8 +776,8 @@ export default function CreateJobPage() {
           </div>
 
           {/* Supervisor */}
-          <div>
-            <Label className="pb-2">Select Supervisor</Label>
+          <div className="w-full">
+            <Label className="pb-2 block">Select Supervisor</Label>
             <Select
               value={formData.supervisor}
               onValueChange={(value) => handleChange('supervisor', value)}
@@ -739,7 +787,7 @@ export default function CreateJobPage() {
                 (isSuperAdmin && !formData.companyId)
               }
             >
-              <SelectTrigger className="w-auto md:w-full">
+              <SelectTrigger className="w-full">
                 <SelectValue
                   placeholder={
                     isSuperAdmin && !formData.companyId
@@ -758,14 +806,14 @@ export default function CreateJobPage() {
             </Select>
           </div>
 
-          {/* Nature of Work */}
-          <div>
-            <Label className="pb-2">Nature of Work</Label>
-            <div className="flex justify-between flex-wrap gap-2">
+          {/* Nature of Work + Search tech */}
+          <div className="w-full">
+            <Label className="pb-2 block">Nature of Work</Label>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
               <RadioGroup
                 value={formData.natureOfWork}
                 onValueChange={(value) => handleChange('natureOfWork', value)}
-                className="flex gap-6 mt-2 flex-wrap"
+                className="flex gap-4 flex-wrap"
               >
                 {natureList.map((n) => (
                   <div className="flex items-center space-x-2" key={n.id}>
@@ -783,7 +831,7 @@ export default function CreateJobPage() {
               {formData.supervisor && (
                 <Button
                   type="button"
-                  className="rounded-full button-click-effect cursor-pointer"
+                  className="rounded-full button-click-effect cursor-pointer w-full md:w-auto"
                   style={{ backgroundColor: primaryColor, color: 'white' }}
                   disabled={
                     techLoading ||
@@ -812,12 +860,64 @@ export default function CreateJobPage() {
               )}
             </div>
           </div>
+
+          {/* Job Image */}
+          <div className="space-y-2 w-full">
+            <Label className="pb-3 block">Job Image</Label>
+            <div className="flex flex-col md:flex-row md:items-center gap-4">
+              <div
+                className="flex items-center gap-4 w-full md:w-auto"
+                style={{
+                  border: '2px dotted #ccc',
+                  borderRadius: '10px',
+                  padding: '16px',
+                  backgroundColor: '#f9fafb',
+                }}
+              >
+                {/* preview */}
+                {jobImage ? (
+                  <img
+                    src={URL.createObjectURL(jobImage)}
+                    alt="Preview"
+                    className="w-28 h-28 md:w-32 md:h-32 object-cover rounded-lg border border-gray-200"
+                  />
+                ) : (
+                  <div className="w-28 h-28 md:w-32 md:h-32 flex items-center justify-center text-gray-400 border border-dashed rounded-lg bg-white">
+                    No Image
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full md:w-48 h-20 md:h-24 border-2 border-dashed border-gray-300 rounded-lg bg-white flex items-center justify-center text-sm text-gray-700 hover:bg-gray-50 transition"
+                >
+                  {jobImage ? 'Change File' : 'Choose File'}
+                </button>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setJobImage(e.target.files?.[0] || null)}
+                  className="hidden"
+                />
+              </div>
+
+              {jobImage && (
+                <p className="text-sm text-gray-600 break-all">
+                  Selected file:{' '}
+                  <span className="font-medium">{jobImage.name}</span>
+                </p>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Available Technicians */}
+        {/* technician table */}
         {showTechTable && (
           <>
-            <div className="border-b mt-4">
+            <div className="border-b mt-6 mb-2">
               <h3
                 className="font-medium border-b-3 rounded-xs inline-block pb-1"
                 style={{ color: primaryColor, borderColor: primaryColor }}
@@ -830,10 +930,18 @@ export default function CreateJobPage() {
                 <thead className="bg-gray-100">
                   <tr>
                     <th className="p-2 text-left"> </th>
-                    <th className="p-2 text-left">Technician Name</th>
-                    <th className="p-2 text-left">Assigned Jobs</th>
-                    <th className="p-2 text-left">Can Assign?</th>
-                    <th className="p-2 text-left">Available Time</th>
+                    <th className="p-2 text-left whitespace-nowrap">
+                      Technician Name
+                    </th>
+                    <th className="p-2 text-left whitespace-nowrap">
+                      Assigned Jobs
+                    </th>
+                    <th className="p-2 text-left whitespace-nowrap">
+                      Can Assign?
+                    </th>
+                    <th className="p-2 text-left whitespace-nowrap">
+                      Available Time
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -868,11 +976,12 @@ export default function CreateJobPage() {
           </p>
         )}
 
-        <div className="flex justify-end gap-4 mt-4">
+        {/* actions */}
+        <div className="flex flex-col sm:flex-row justify-end gap-4 mt-6">
           <Button
             variant="destructive"
             onClick={handleCancel}
-            className="cursor-pointer button-click-effect"
+            className="button-click-effect"
             type="button"
             disabled={saving}
           >
@@ -882,14 +991,7 @@ export default function CreateJobPage() {
             className="text-white button-click-effect"
             style={{ backgroundColor: primaryColor }}
             type="button"
-            disabled={
-              saving ||
-              (isSuperAdmin && !formData.companyId) ||
-              !formData.client ||
-              !formData.workType ||
-              !formData.scheduleDate ||
-              !formData.supervisor
-            }
+            disabled={actionsDisabled}
             onClick={handleSave}
           >
             {saving ? 'Saving…' : 'Save'}

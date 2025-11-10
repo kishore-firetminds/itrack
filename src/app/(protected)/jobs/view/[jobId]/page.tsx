@@ -90,6 +90,7 @@ type JobDetails = {
   worktype_id?: string;
   jobtype_id?: string;
   job_description?: string;
+  job_photo?: string;
   estimated_duration?: number;
   scheduledDateAndTime?: string;
   supervisor_id?: string;
@@ -289,6 +290,7 @@ export default function ViewJobPage() {
 
   const workTypeName = job.work_type?.worktype_name || '—';
   const jobTypeName = job.job_type?.jobtype_name || '—';
+  const jobPhotoUrl = (job.job_photo || '').trim();
 
   const clientAddr = [
     job.client?.address_1,
@@ -367,6 +369,7 @@ export default function ViewJobPage() {
             width={600}
             height={300}
             className="w-full rounded-md"
+            unoptimized
           />
         </div>
       </Card>
@@ -388,6 +391,7 @@ export default function ViewJobPage() {
               width={48}
               height={48}
               className="rounded-full"
+              unoptimized
             />
             <div>
               <p className="font-semibold">{techName}</p>
@@ -416,13 +420,25 @@ export default function ViewJobPage() {
           </div>
 
           <div className="flex gap-2 items-start mt-2">
-            <Image
-              src="/assets/job-image.png"
-              alt="job"
-              width={60}
-              height={60}
-              className="rounded"
-            />
+            {jobPhotoUrl ? (
+              <Image
+                src={jobPhotoUrl}
+                alt="Job photo"
+                width={64}
+                height={64}
+                className="rounded object-cover border border-gray-200"
+                unoptimized
+              />
+            ) : (
+              <Image
+                src="/assets/job-image.png"
+                alt="job"
+                width={60}
+                height={60}
+                className="rounded"
+                unoptimized
+              />
+            )}
             <div>
               <p className="font-semibold">{workTypeName}</p>
               <p className="text-xs font-medium" style={{ color: statusColor }}>

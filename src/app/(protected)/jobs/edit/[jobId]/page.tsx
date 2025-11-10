@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/store/store';
@@ -146,6 +146,7 @@ type JobDetails = {
   worktype_id?: string;
   jobtype_id?: string;
   job_description?: string;
+  job_photo?: string;
   estimated_duration?: number; // total mins fallback
   estimated_days?: number;
   estimated_hours?: number;
@@ -257,6 +258,23 @@ export default function EditJobPage() {
     jobStatusId: '',
   });
 
+  const [jobPhotoUrl, setJobPhotoUrl] = useState<string>('');
+  const [jobPhotoFile, setJobPhotoFile] = useState<File | null>(null);
+  const [jobPhotoPreview, setJobPhotoPreview] = useState<string | null>(null);
+  const [jobPhotoRemoved, setJobPhotoRemoved] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (jobPhotoFile) {
+      const previewUrl = URL.createObjectURL(jobPhotoFile);
+      setJobPhotoPreview(previewUrl);
+      return () => {
+        URL.revokeObjectURL(previewUrl);
+      };
+    }
+    setJobPhotoPreview(jobPhotoUrl || null);
+  }, [jobPhotoFile, jobPhotoUrl]);
+
   // -------- Status helpers & read-only rules --------
   const normalize = (s: string) =>
     (s || '').toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -339,6 +357,32 @@ export default function EditJobPage() {
       ...p,
       durationMinutes: clampNumStr(p.durationMinutes, 0, 59),
     }));
+
+  const triggerPhotoPicker = () => {
+    if (formDisabled) return;
+    photoInputRef.current?.click();
+  };
+
+  const onPhotoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setJobPhotoFile(file);
+      setJobPhotoRemoved(false);
+    }
+    // allow selecting the same file twice
+    event.target.value = '';
+  };
+
+  const onRemovePhoto = () => {
+    if (jobPhotoFile) {
+      setJobPhotoFile(null);
+      return;
+    }
+    if (jobPhotoUrl) {
+      setJobPhotoUrl('');
+      setJobPhotoRemoved(true);
+    }
+  };
 
   /** --------- Load companies (super_admin) --------- */
   useEffect(() => {
@@ -472,6 +516,9 @@ export default function EditJobPage() {
           technician: job.technician_id ? String(job.technician_id) : '',
           jobStatusId: job.job_status_id ? String(job.job_status_id) : '',
         }));
+        setJobPhotoUrl(job.job_photo || '');
+        setJobPhotoFile(null);
+        setJobPhotoRemoved(false);
 
         // also store the status title from job for gating
         setCurrentStatusLabel(String(job.job_status?.job_status_title || ''));
@@ -782,8 +829,22 @@ export default function EditJobPage() {
         ? `${urlMap.UPDATE_JOB}/${jobId}`
         : `/jobs/${jobId}`;
 
-      // Use PUT or PATCH per your API
-      await api.put(updateUrl, payload);
+      if (jobPhotoFile) {
+        const fd = new FormData();
+        Object.entries(payload).forEach(([key, value]) => {
+          if (value === undefined || value === null) return;
+          fd.append(key, typeof value === 'string' ? value : String(value));
+        });
+        fd.append('job_photo', jobPhotoFile);
+        await api.put(updateUrl, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      } else {
+        const jsonPayload = jobPhotoRemoved
+          ? { ...payload, remove_job_photo: true }
+          : payload;
+        await api.put(updateUrl, jsonPayload);
+      }
 
       router.push('/jobs');
     } catch (e) {
@@ -1117,6 +1178,72 @@ export default function EditJobPage() {
               rows={3}
               value={formData.jobDescription}
               onChange={(e) => handleChange('jobDescription', e.target.value)}
+              disabled={formDisabled}
+            />
+          </div>
+
+          {/* Job Photo */}
+          <div>
+            <Label className="pb-2">Job Photo (optional)</Label>
+            <p className="text-xs text-gray-500 -mt-1 mb-2">
+              Attach a reference photo for this job card.
+            </p>
+            <div className="flex flex-col md:flex-row items-start gap-4">
+              <div className="w-28 h-28 md:w-32 md:h-32 border border-gray-200 rounded-lg flex items-center justify-center bg-white overflow-hidden">
+                {jobPhotoPreview ? (
+                  <img
+                    src={jobPhotoPreview}
+                    alt="Selected job"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-xs text-gray-400">No image</span>
+                )}
+              </div>
+              <div className="flex flex-col gap-2 w-full md:w-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={triggerPhotoPicker}
+                  disabled={formDisabled}
+                  className="button-click-effect w-full md:w-48"
+                >
+                  {jobPhotoFile
+                    ? 'Change Photo'
+                    : jobPhotoPreview
+                    ? 'Replace Photo'
+                    : 'Upload Photo'}
+                </Button>
+                {(jobPhotoFile || jobPhotoUrl) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={onRemovePhoto}
+                    disabled={formDisabled}
+                    className="text-red-500 hover:text-red-600 hover:bg-red-50 button-click-effect w-full md:w-48"
+                  >
+                    {jobPhotoFile ? 'Clear Selection' : 'Remove Photo'}
+                  </Button>
+                )}
+                {jobPhotoFile && (
+                  <p className="text-xs text-gray-500 break-all">
+                    Selected file:{' '}
+                    <span className="font-medium">{jobPhotoFile.name}</span>
+                  </p>
+                )}
+                {!jobPhotoFile && jobPhotoUrl && !jobPhotoRemoved && (
+                  <p className="text-xs text-gray-500 break-all">
+                    Current photo on file
+                  </p>
+                )}
+              </div>
+            </div>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={onPhotoFileChange}
               disabled={formDisabled}
             />
           </div>
