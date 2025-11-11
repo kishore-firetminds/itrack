@@ -18,7 +18,7 @@ import {
   SelectContent,
   SelectItem,
 } from '@/components/ui/select';
-import { Loader2, Phone, Mail } from 'lucide-react';
+import { BadgeCheck, Loader2, Phone, Mail } from 'lucide-react';
 import Image from 'next/image';
 
 import DatePickerWithInput from '@/app/components/DatePickerWithInput';
@@ -200,8 +200,10 @@ export default function EditJobPage() {
       return null;
     }
   });
-  const isSuperAdmin =
-    (currentUser?.role?.slug || '').toLowerCase() === 'super_admin';
+  const roleSlug = (currentUser?.role?.slug || '').toLowerCase();
+  const isSuperAdmin = roleSlug === 'super_admin';
+  const isSupervisorUser =
+    roleSlug === 'supervisor' || roleSlug === 'super_admin';
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -315,6 +317,11 @@ export default function EditJobPage() {
     if (n.includes('completed') || n === 'done') return 'completed';
     if (n.includes('rejected')) return 'rejected';
     if (n.includes('unresolved')) return 'unresolved';
+    if (
+      n.includes('waitingforapproval') ||
+      (n.includes('waiting') && n.includes('approval'))
+    )
+      return 'waiting_for_approval';
     return n || '';
   };
 
@@ -743,10 +750,14 @@ export default function EditJobPage() {
       setHasSearchedTechs(false);
       setTechnicians([]);
 
-      const params: Record<string, string | undefined> = { supervisor_id: formData.supervisor };
+      const params: Record<string, string | undefined> = {
+        supervisor_id: formData.supervisor,
+      };
       if (formData.companyId) params.company_id = formData.companyId;
 
-      const res = await api.get<ApiEnvelope<UserBE[]>>('/admin/users', { params });
+      const res = await api.get<ApiEnvelope<UserBE[]>>('/admin/users', {
+        params,
+      });
 
       const raw = (res.data?.data ?? []) as UserBE[];
       setTechnicians(
@@ -915,9 +926,52 @@ export default function EditJobPage() {
             };
 
             let statuses = allStatuses;
+            const waitingStatus =
+              allStatuses.find((s) => s.key === 'waiting_for_approval') || null;
+            const completedReference =
+              allStatuses.find((s) => s.key === 'completed') || null;
 
-            // Prefer backend-provided allowed actions if available
-            if (
+            const buildAcceptRejectStatuses = () => {
+              const assigned =
+                allStatuses.find((s) => s.key === 'assigned') ||
+                allStatuses.find((s) => /assign/i.test(s.name));
+              const rejected =
+                allStatuses.find((s) => s.key === 'rejected') ||
+                allStatuses.find((s) => /reject/i.test(s.name));
+              const custom: typeof allStatuses = [];
+              if (assigned)
+                custom.push({
+                  ...assigned,
+                  name: 'Accept',
+                  completed: false,
+                });
+              if (rejected)
+                custom.push({
+                  ...rejected,
+                  name: 'Reject',
+                  completed: false,
+                });
+              return custom;
+            };
+
+            const buildAssignedStatuses = () => {
+              const base = ['enroute', 'onsite', 'completed', 'unresolved'];
+              const extra =
+                key === 'onhold' || key === 'hold' || /hold/.test(key)
+                  ? ['resume']
+                  : ['onhold'];
+              const opts = pickByKeys([...base, ...extra]);
+              const dedup = new Set<string>();
+              return opts.filter((s) =>
+                dedup.has(s.value) ? false : (dedup.add(s.value), true)
+              );
+            };
+
+            if (key === 'not_started') {
+              statuses = buildAcceptRejectStatuses();
+            } else if (key === 'assigned') {
+              statuses = buildAssignedStatuses();
+            } else if (
               availableActions &&
               availableActions.length > 0 &&
               allStatuses.length > 0
@@ -927,32 +981,6 @@ export default function EditJobPage() {
               );
               statuses = allStatuses.filter((s) => allow.has(String(s.value)));
             } else {
-              // Fallback to UI gating
-              if (key === 'not_started') {
-                // Prefer explicit Approved status; else fall back to Assigned
-                const approved =
-                  allStatuses.find((s) => s.key === 'approved') ||
-                  allStatuses.find((s) => /approve/i.test(s.name));
-                const assigned =
-                  allStatuses.find((s) => s.key === 'assigned') ||
-                  allStatuses.find((s) => /assign/i.test(s.name));
-                const rejected =
-                  allStatuses.find((s) => s.key === 'rejected') ||
-                  allStatuses.find((s) => /reject/i.test(s.name));
-
-                const next: typeof allStatuses = [] as any;
-                const approveOpt = approved ?? assigned;
-                if (approveOpt)
-                  next.push({
-                    ...approveOpt,
-                    name: 'Approve',
-                    completed: false,
-                  });
-                if (rejected)
-                  next.push({ ...rejected, name: 'Reject', completed: false });
-                statuses = next;
-              }
-
               const inAssignPhase = [
                 'approved',
                 'assigned',
@@ -963,21 +991,41 @@ export default function EditJobPage() {
                 'hold', // extra guard if a label normalizes to 'hold'
               ].includes(key);
               if (inAssignPhase) {
-                const base = ['enroute', 'onsite', 'completed', 'unresolved'];
-                // Show only one of onhold/resume based on current status
-                let extra: string[] = [];
-                if (key === 'onhold' || key === 'hold' || /hold/.test(key))
-                  extra = ['resume'];
-                else if (key === 'resume') extra = ['onhold'];
-                else extra = ['onhold'];
-                const keys = [...base, ...extra];
-                const opts = pickByKeys(keys);
-                // Deduplicate by value since we may include aliases
-                const seen = new Set<string>();
-                statuses = opts.filter((s) =>
-                  seen.has(s.value) ? false : (seen.add(s.value), true)
-                );
+                statuses = buildAssignedStatuses();
               }
+            }
+
+            if (key === 'waiting_for_approval') {
+              if (waitingStatus) {
+                statuses = [
+                  {
+                    ...waitingStatus,
+                    name: waitingStatus.name || 'Waiting For Approval',
+                    color: completedReference?.color || waitingStatus.color,
+                    key: 'waiting_for_approval',
+                  },
+                ];
+              } else if (completedReference) {
+                statuses = [
+                  {
+                    ...completedReference,
+                    name: 'Waiting For Approval',
+                    key: 'waiting_for_approval',
+                  },
+                ];
+              }
+            } else if (waitingStatus) {
+              statuses = statuses
+                .filter((s) => s.key !== 'waiting_for_approval')
+                .map((s) => {
+                  if (s.key === 'completed') {
+                    return {
+                      ...s,
+                      value: waitingStatus.value,
+                    };
+                  }
+                  return s;
+                });
             }
 
             // Final safety: if nothing matched (e.g., mismatched ids), show the unfiltered list
@@ -985,7 +1033,10 @@ export default function EditJobPage() {
               statuses = allStatuses;
             }
 
-            const onStatusChange = async (nextStatusId: string) => {
+            const onStatusChange = async (
+              nextStatusId: string,
+              successMessage?: string
+            ) => {
               if (
                 !jobId ||
                 statusUpdating ||
@@ -1008,7 +1059,7 @@ export default function EditJobPage() {
                   ? `${urlMap.UPDATE_JOB}/${jobId}`
                   : `/jobs/${jobId}`;
                 await api.put(updateUrl, { job_status_id: nextStatusId });
-                toast.success('Job status updated');
+                toast.success(successMessage ?? 'Job status updated');
               } catch (e) {
                 console.error('Failed to update job status', e);
                 // revert on failure
@@ -1024,14 +1075,63 @@ export default function EditJobPage() {
               }
             };
 
+            const showSupervisorApprovalUI =
+              isSupervisorUser && key === 'waiting_for_approval';
+
+            const handleSupervisorDecision = async (
+              targetKey: 'completed' | 'onsite'
+            ) => {
+              const target = pickByKeys([targetKey])[0];
+              if (!target) {
+                toast.error('Status option not available yet');
+                return;
+              }
+              await onStatusChange(
+                target.value,
+                targetKey === 'completed'
+                  ? 'Job approved and marked as Completed.'
+                  : 'Job moved back to On Site.'
+              );
+              if (targetKey === 'onsite') {
+                toast.info('Technician needs to rework on the job.');
+              }
+            };
+
+            const selectorDisabled =
+              isTerminalStatus || key === 'waiting_for_approval';
+
             return (
-              <JobStatusSelector
-                statuses={statuses}
-                selectedStatus={formData.jobStatusId}
-                onChange={onStatusChange}
-                loading={statusUpdating}
-                disabled={isTerminalStatus}
-              />
+              <>
+                {showSupervisorApprovalUI && (
+                  <div className="flex flex-wrap gap-3 mb-4">
+                    <Button
+                      type="button"
+                      className="button-click-effect text-white"
+                      style={{ backgroundColor: primaryColor }}
+                      disabled={statusUpdating || isTerminalStatus}
+                      onClick={() => handleSupervisorDecision('completed')}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      className="button-click-effect"
+                      disabled={statusUpdating || isTerminalStatus}
+                      onClick={() => handleSupervisorDecision('onsite')}
+                    >
+                      Reject
+                    </Button>
+                  </div>
+                )}
+                <JobStatusSelector
+                  statuses={statuses}
+                  selectedStatus={formData.jobStatusId}
+                  onChange={onStatusChange}
+                  loading={statusUpdating}
+                  disabled={selectorDisabled}
+                />
+              </>
             );
           })()}
         </div>
@@ -1511,7 +1611,9 @@ export default function EditJobPage() {
             <div className="flex items-center gap-4 flex-wrap">
               <span className="font-medium">
                 Selected Technician
-                {selectedTechDetails?.name ? `: ${selectedTechDetails.name}` : ''}
+                {selectedTechDetails?.name
+                  ? `: ${selectedTechDetails.name}`
+                  : ''}
               </span>
               {selectedTechDetails?.phone && (
                 <span className="opacity-70 flex items-center gap-1">

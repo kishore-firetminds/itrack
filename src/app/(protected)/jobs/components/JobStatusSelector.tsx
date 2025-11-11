@@ -59,6 +59,8 @@ export default function JobStatusSelector({
     )
       return 'resume';
     if (n.includes('completed') || n === 'done') return 'completed';
+    if (n.includes('waitingforapproval') || (n.includes('waiting') && n.includes('approval')))
+      return 'waiting_for_approval';
     if (n.includes('rejected') || n.includes('reject')) return 'rejected';
     if (n.includes('unresolved')) return 'unresolved';
     return n || '';
