@@ -255,6 +255,7 @@ export default function ViewJobPage() {
         icon,
         color: h.job_status_color_code || color,
         status: h.is_completed || !!h.at ? 'done' : 'pending',
+        remarks: h.remarks || '',
       };
     });
     // ensure typical milestones exist (pending if missing)
@@ -299,7 +300,7 @@ export default function ViewJobPage() {
   ]
     .filter(Boolean)
     .join(', ');
-  const region = job.client?.city || '—';
+  const region = job.client?.address_1 || '—';
 
   const tech = job.technician;
   const techName = tech?.name || '—';

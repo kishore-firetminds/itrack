@@ -27,11 +27,7 @@ export default function JobStatusSelector({
 }: Props) {
   // Canonicalize status labels to robust keys
   const normalize = (s: string) =>
-    (s || '')
-      .toLowerCase()
-      .replace(/[_-]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+    (s || '').toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
   const canonicalKey = (name: string) => {
     const n = normalize(name).replace(/\s+/g, '');
     if (n.includes('notstarted') || n === 'new' || n.includes('pending'))
@@ -46,7 +42,12 @@ export default function JobStatusSelector({
     if (n.includes('enroute') || n.includes('enrout')) return 'enroute';
     if (n.includes('onsite') || n.includes('onsit') || n.includes('on-site'))
       return 'onsite';
-    if (n.includes('onhold') || n.includes('hold') || n.includes('paused') || n.includes('pause'))
+    if (
+      n.includes('onhold') ||
+      n.includes('hold') ||
+      n.includes('paused') ||
+      n.includes('pause')
+    )
       return 'onhold';
     if (
       n.includes('resume') ||
@@ -59,7 +60,10 @@ export default function JobStatusSelector({
     )
       return 'resume';
     if (n.includes('completed') || n === 'done') return 'completed';
-    if (n.includes('waitingforapproval') || (n.includes('waiting') && n.includes('approval')))
+    if (
+      n.includes('waitingforapproval') ||
+      (n.includes('waiting') && n.includes('approval'))
+    )
       return 'waiting_for_approval';
     if (n.includes('rejected') || n.includes('reject')) return 'rejected';
     if (n.includes('unresolved')) return 'unresolved';
@@ -67,10 +71,15 @@ export default function JobStatusSelector({
   };
 
   // Derive current key and apply gating as a safety net
-  const selected = statuses.find((s) => String(s.value) === String(selectedStatus));
+  const selected = statuses.find(
+    (s) => String(s.value) === String(selectedStatus)
+  );
   const currentKey = selected ? canonicalKey(selected.name) : '';
 
-  const allWithKeys = statuses.map((s) => ({ ...s, key: canonicalKey(s.name) }));
+  const allWithKeys = statuses.map((s) => ({
+    ...s,
+    key: canonicalKey(s.name),
+  }));
 
   const pickByKeys = (keys: string[]) => {
     const out: typeof allWithKeys = [] as any;
@@ -87,26 +96,47 @@ export default function JobStatusSelector({
 
   let display = allWithKeys;
   if (currentKey === 'not_started') {
-    const approved = allWithKeys.find((s) => s.key === 'approved') || allWithKeys.find((s) => /approve/i.test(s.name));
-    const assigned = allWithKeys.find((s) => s.key === 'assigned') || allWithKeys.find((s) => /assign/i.test(s.name));
-    const rejected = allWithKeys.find((s) => s.key === 'rejected') || allWithKeys.find((s) => /reject/i.test(s.name));
+    const approved =
+      allWithKeys.find((s) => s.key === 'approved') ||
+      allWithKeys.find((s) => /approve/i.test(s.name));
+    const assigned =
+      allWithKeys.find((s) => s.key === 'assigned') ||
+      allWithKeys.find((s) => /assign/i.test(s.name));
+    const rejected =
+      allWithKeys.find((s) => s.key === 'rejected') ||
+      allWithKeys.find((s) => /reject/i.test(s.name));
     const next: typeof allWithKeys = [] as any;
     const approveOpt = approved ?? assigned;
     if (approveOpt) next.push({ ...approveOpt, name: 'Approve' });
     if (rejected) next.push({ ...rejected, name: 'Reject' });
     display = next.length > 0 ? next : display;
   } else if (
-    ['approved', 'assigned', 'enroute', 'onsite', 'onhold', 'resume', 'hold'].includes(currentKey)
+    [
+      'approved',
+      'assigned',
+      'enroute',
+      'onsite',
+      'onhold',
+      'resume',
+      'hold',
+    ].includes(currentKey)
   ) {
     const base = ['enroute', 'onsite', 'completed', 'unresolved'];
     let extra: string[] = [];
-    if (currentKey === 'onhold' || currentKey === 'hold' || /hold/.test(currentKey)) extra = ['resume'];
+    if (
+      currentKey === 'onhold' ||
+      currentKey === 'hold' ||
+      /hold/.test(currentKey)
+    )
+      extra = ['resume'];
     else if (currentKey === 'resume') extra = ['onhold'];
     else extra = ['onhold'];
     const keys = [...base, ...extra];
     const opts = pickByKeys(keys);
     const seen = new Set<string>();
-    display = opts.filter((s) => (seen.has(s.value) ? false : (seen.add(s.value), true)));
+    display = opts.filter((s) =>
+      seen.has(s.value) ? false : (seen.add(s.value), true)
+    );
   }
 
   // Strip helper key before rendering
@@ -132,8 +162,9 @@ export default function JobStatusSelector({
             )}
             style={{
               borderColor: status.color,
-              color: isSelected ? 'white' : status.color,
-              backgroundColor: isSelected ? status.color : 'transparent',
+              color: isSelected || isCompleted ? 'white' : status.color,
+              backgroundColor:
+                isSelected || isCompleted ? status.color : 'transparent',
             }}
             aria-busy={loading && isSelected}
           >

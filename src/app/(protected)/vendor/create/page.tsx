@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/store/store';
@@ -71,6 +71,8 @@ export default function CreateVendorPage() {
     role_id: '',
     region_id: '',
   });
+
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
 
   // ---------- Helpers ----------
   const setField = (k: string, v: any) => setFormData((prev) => ({ ...prev, [k]: v }));
@@ -334,15 +336,21 @@ export default function CreateVendorPage() {
          
           <div className="md:col-span-1 ">
            
-            <div className="flex items-center gap-4 mt-2 grid-cols-1 md:grid-cols-2" style={{
-              border: "3px dotted #b1b1b1",
-              borderRadius: "15px",
-              padding: "20px",
-              backgroundColor:  "#f8f9fa",
-              cursor: "pointer",
-              transition: "all 0.2s ease-in-out",
-              alignItems: "center",
-            }}>
+            <div
+              className="flex items-center gap-4 mt-2 grid-cols-1 md:grid-cols-2"
+              role="button"
+              tabIndex={0}
+              onClick={() => photoInputRef.current?.click()}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') photoInputRef.current?.click(); }}
+              style={{
+               border: "3px dotted #b1b1b1",
+               borderRadius: "15px",
+               padding: "20px",
+               backgroundColor:  "#f8f9fa",
+               cursor: "pointer",
+               transition: "all 0.2s ease-in-out",
+               alignItems: "center",
+             }}>
               {photoFile ? (
                 <img
                   src={URL.createObjectURL(photoFile)}
@@ -360,13 +368,13 @@ export default function CreateVendorPage() {
                   No Photo
                 </div>
               )}
-              <Input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
-                className="w-auto border-2 border-dashed p-2"
-              />
-            </div>
+              <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setPhotoFile(e.target.files?.[0] || null)} />
+              <div className="ml-3">
+                <button type="button" onClick={(e) => { e.stopPropagation(); photoInputRef.current?.click(); }} className="px-3 py-1 bg-white border rounded">
+                  Upload Photo
+                </button>
+              </div>
+             </div>
           </div>
           <div className="md:col-span-1 "></div>
 

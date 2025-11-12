@@ -223,7 +223,7 @@ const Sidebar = ({
         className={`group relative flex items-center gap-3 py-2 pl-4 pr-4 transition font-small ${
           isActive
             ? 'bg-white font-semibold'
-            : 'text-gray-400 hover:bg-gray-100'
+            : 'text-white hover:bg-[#0f2770]'
         }`}
       >
         {isActive && (
@@ -236,7 +236,8 @@ const Sidebar = ({
         <span
           className="truncate"
           style={{
-            color: isActive ? primaryColor : undefined,
+            // color: isActive ? primaryColor : undefined,
+              color: isActive ? '#1e3fad' : undefined,
             transition: 'all 0.2s ease',
           }}
         >
@@ -287,7 +288,7 @@ const Sidebar = ({
             {!collapsed && (
               <span
                 className="font-bold text-600 text-xl"
-                style={{ color: primaryColor }}
+                style={{ color: '#1e3fad' }}
               >
                 {companyData.name}
               </span>
@@ -295,11 +296,11 @@ const Sidebar = ({
           </div>
 
           {/* Links */}
-          <nav className="flex-1 overflow-y-auto pb-4 space-y-2">
+          <nav className="flex-1 overflow-y-auto pb-4 space-y-2" style={{backgroundColor: '#1e3fad'}}>
             {mainLinks.map(renderLink)}
 
             {masterLinks.length > 0 && !collapsed && (
-              <div className="text-xs font-semibold text-gray-400 px-4 pt-4">
+              <div className="text-xs font-semibold text-white px-4 pt-4">
                 MASTER
               </div>
             )}
@@ -309,7 +310,7 @@ const Sidebar = ({
             {masterLinks.map(renderLink)}
 
             {settingLinks.length > 0 && !collapsed && (
-              <div className="text-xs font-semibold text-gray-400 px-4 pt-4">
+              <div className="text-xs font-semibold text-white px-4 pt-4">
                 SETTINGS
               </div>
             )}
@@ -320,7 +321,7 @@ const Sidebar = ({
           </nav>
 
           {/* Logout */}
-          <div className="border-t">
+          <div className="border-t" style={{backgroundColor: '#1e3fad'}}>
             {renderLink({ name: 'Logout', href: '/logout', icon: LogOut })}
           </div>
 
@@ -330,9 +331,9 @@ const Sidebar = ({
             className="absolute -right-3 rounded-lg top-3 hidden md:flex items-center justify-center p-1 bg-gray-200 hover:bg-gray-100 transition"
           >
             {collapsed ? (
-              <ChevronsRight className="w-5 h-5 text-gray-500" />
+              <ChevronsRight className="w-5 h-5 text-white-500" />
             ) : (
-              <ChevronsLeft className="w-5 h-5 text-gray-500" />
+              <ChevronsLeft className="w-5 h-5 text-white-500" />
             )}
           </button>
         </aside>

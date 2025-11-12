@@ -48,6 +48,10 @@ export default function CreateCompanyPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [proofFile, setProofFile] = useState<File | null>(null);
 
+  // refs for hidden file inputs
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
+  const proofInputRef = useRef<HTMLInputElement | null>(null);
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordError, setPasswordError] = useState('');
@@ -245,10 +249,9 @@ export default function CreateCompanyPage() {
           <Label className="mb-2 block pb-3">Company Logo</Label>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
             <div className="flex justify-start " style={{
-              border: "3px dotted #b1b1b1",
-              borderRadius: "15px",
+             
               padding: "20px",
-              backgroundColor:  "#f8f9fa",
+            
               cursor: "pointer",
               transition: "all 0.2s ease-in-out",
               alignItems: "center",
@@ -271,23 +274,18 @@ export default function CreateCompanyPage() {
                 </div>
               )}
             
-              <Input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
-                className="border-2 border-dashed p-2"
-                style={{
-                  opacity: 1,
-                  height: '125px',
-                   
-                  margin: '3px',
-                }}
-              />
-              {logoFile && (
-                <p className="mt-2 text-sm text-gray-600">
-                  Selected: {logoFile.name}
-                </p>
-              )}
+              {/* hidden native file input triggered by clicking area or button */}
+              <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setLogoFile(e.target.files?.[0] || null)} />
+              <div className="ml-4">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }}
+                  className="px-3 py-1 border rounded"
+                  style={{ backgroundColor: primaryColor, color: '#fff', borderColor: primaryColor }}
+                >
+                  Upload Logo
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -523,18 +521,23 @@ export default function CreateCompanyPage() {
             </div>
             {/* Upload */}
             <div>
-              <Input
-                type="file"
-                accept="application/pdf,image/*"
-                onChange={(e) => setProofFile(e.target.files?.[0] || null)}
-                className="border-2 border-dashed p-2"
-              />
-              {proofFile && (
-                <p className="mt-2 text-sm text-gray-600">
-                  Selected: {proofFile.name}
-                </p>
-              )}
-            </div>
+              <input ref={proofInputRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => setProofFile(e.target.files?.[0] || null)} />
+              <div>
+                <button
+                  type="button"
+                  onClick={() => proofInputRef.current?.click()}
+                  className="px-3 py-1 border rounded"
+                  style={{ backgroundColor: primaryColor, color: '#fff', borderColor: primaryColor }}
+                >
+                  Upload Proof
+                </button>
+              </div>
+               {proofFile && (
+                 <p className="mt-2 text-sm text-gray-600">
+                   Selected: {proofFile.name}
+                 </p>
+               )}
+             </div>
           </div>
         </div>
 

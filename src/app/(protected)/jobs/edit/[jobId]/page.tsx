@@ -18,6 +18,13 @@ import {
   SelectContent,
   SelectItem,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { BadgeCheck, Loader2, Phone, Mail } from 'lucide-react';
 import Image from 'next/image';
 
@@ -184,6 +191,17 @@ type FormData = {
   jobStatusId: string;
 };
 
+type StatusHistoryItem = {
+  id: string;
+  job_status_id: string;
+  job_status_title: string;
+  job_status_color_code?: string;
+  is_completed?: boolean;
+  remarks?: string | null;
+  completed?: boolean;
+  at: string; // ISO
+};
+
 /** ---------------- Component ---------------- */
 export default function EditJobPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -203,7 +221,7 @@ export default function EditJobPage() {
   const roleSlug = (currentUser?.role?.slug || '').toLowerCase();
   const isSuperAdmin = roleSlug === 'super_admin';
   const isSupervisorUser =
-    roleSlug === 'supervisor' || roleSlug === 'super_admin';
+    roleSlug === 'supervisor' || roleSlug === 'company_admin';
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -265,6 +283,11 @@ export default function EditJobPage() {
   const [jobPhotoPreview, setJobPhotoPreview] = useState<string | null>(null);
   const [jobPhotoRemoved, setJobPhotoRemoved] = useState(false);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectSubmitting, setRejectSubmitting] = useState(false);
+  const [rejectError, setRejectError] = useState('');
+  const [statusHistory, setStatusHistory] = useState<StatusHistoryItem[]>([]);
 
   useEffect(() => {
     if (jobPhotoFile) {
@@ -474,6 +497,10 @@ export default function EditJobPage() {
         if (cancelled) return;
 
         const job = jobRes.data;
+        const history = (job as any)?.status_history;
+        setStatusHistory(
+          Array.isArray(history) ? (history as StatusHistoryItem[]) : []
+        );
         if (!job?.job_id) {
           setError('No job data found.');
           setLoading(false);
@@ -865,6 +892,65 @@ export default function EditJobPage() {
     }
   };
 
+  // ---- Status update with optional extra payload (e.g., remarks) ----
+  const onStatusChange = async (
+    nextStatusId: string,
+    successMessage?: string,
+    extra?: Record<string, any>
+  ) => {
+    if (!jobId || statusUpdating || formData.jobStatusId === nextStatusId)
+      return;
+    if (isTerminalStatus) return;
+    const prev = formData.jobStatusId;
+
+    try {
+      setStatusUpdating(true);
+      // optimistic update
+      setFormData((p) => ({ ...p, jobStatusId: nextStatusId }));
+      // update the current status label to the chosen option, for gating
+      const chosen = jobStatusOpts.find(
+        (s) => String(s.value) === String(nextStatusId)
+      );
+      if (chosen) setCurrentStatusLabel(chosen.label);
+
+      const updateUrl = urlMap.UPDATE_JOB
+        ? `${urlMap.UPDATE_JOB}/${jobId}`
+        : `/jobs/${jobId}`;
+      await api.put(updateUrl, {
+        job_status_id: nextStatusId,
+        ...(extra || {}),
+      });
+      toast.success(successMessage ?? 'Job status updated');
+    } catch (e) {
+      console.error('Failed to update job status', e);
+      // revert on failure
+      setFormData((p) => ({ ...p, jobStatusId: prev }));
+      // revert the label if we changed it
+      const cur = jobStatusOpts.find((s) => String(s.value) === String(prev));
+      if (cur) setCurrentStatusLabel(cur.label);
+      toast.error('Failed to update job status');
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
+  // Latest history item by "at" timestamp (or last in array)
+  const latestHistory = useMemo(() => {
+    if (!statusHistory || statusHistory.length === 0) return null;
+    // If the backend already returns chronological, last is fine; otherwise sort for safety
+    const sorted = [...statusHistory].sort(
+      (a, b) => new Date(a.at).getTime() - new Date(b.at).getTime()
+    );
+    return sorted[sorted.length - 1];
+  }, [statusHistory]);
+
+  const onsiteWarning = useMemo(() => {
+    if (!latestHistory) return { show: false, text: '' };
+    const key = canonicalKey(latestHistory.job_status_title || '');
+    const text = (latestHistory.remarks || '').trim();
+    return { show: key === 'onsite' && !!text, text };
+  }, [latestHistory, canonicalKey]);
+
   /** --------- UI --------- */
   if (loading) {
     return (
@@ -925,12 +1011,6 @@ export default function EditJobPage() {
               return out;
             };
 
-            let statuses = allStatuses;
-            const waitingStatus =
-              allStatuses.find((s) => s.key === 'waiting_for_approval') || null;
-            const completedReference =
-              allStatuses.find((s) => s.key === 'completed') || null;
-
             const buildAcceptRejectStatuses = () => {
               const assigned =
                 allStatuses.find((s) => s.key === 'assigned') ||
@@ -967,6 +1047,8 @@ export default function EditJobPage() {
               );
             };
 
+            let statuses = allStatuses;
+
             if (key === 'not_started') {
               statuses = buildAcceptRejectStatuses();
             } else if (key === 'assigned') {
@@ -988,12 +1070,17 @@ export default function EditJobPage() {
                 'onsite',
                 'onhold',
                 'resume',
-                'hold', // extra guard if a label normalizes to 'hold'
+                'hold',
               ].includes(key);
               if (inAssignPhase) {
                 statuses = buildAssignedStatuses();
               }
             }
+
+            const waitingStatus =
+              allStatuses.find((s) => s.key === 'waiting_for_approval') || null;
+            const completedReference =
+              allStatuses.find((s) => s.key === 'completed') || null;
 
             if (key === 'waiting_for_approval') {
               if (waitingStatus) {
@@ -1033,47 +1120,10 @@ export default function EditJobPage() {
               statuses = allStatuses;
             }
 
-            const onStatusChange = async (
+            const onStatusChangeLocal = async (
               nextStatusId: string,
               successMessage?: string
-            ) => {
-              if (
-                !jobId ||
-                statusUpdating ||
-                formData.jobStatusId === nextStatusId
-              )
-                return;
-              if (isTerminalStatus) return;
-              const prev = formData.jobStatusId;
-              try {
-                setStatusUpdating(true);
-                // optimistic update
-                setFormData((p) => ({ ...p, jobStatusId: nextStatusId }));
-                // update the current status label to the chosen option, for gating
-                const chosen = jobStatusOpts.find(
-                  (s) => String(s.value) === String(nextStatusId)
-                );
-                if (chosen) setCurrentStatusLabel(chosen.label);
-
-                const updateUrl = urlMap.UPDATE_JOB
-                  ? `${urlMap.UPDATE_JOB}/${jobId}`
-                  : `/jobs/${jobId}`;
-                await api.put(updateUrl, { job_status_id: nextStatusId });
-                toast.success(successMessage ?? 'Job status updated');
-              } catch (e) {
-                console.error('Failed to update job status', e);
-                // revert on failure
-                setFormData((p) => ({ ...p, jobStatusId: prev }));
-                // revert the label if we changed it
-                const cur = jobStatusOpts.find(
-                  (s) => String(s.value) === String(prev)
-                );
-                if (cur) setCurrentStatusLabel(cur.label);
-                toast.error('Failed to update job status');
-              } finally {
-                setStatusUpdating(false);
-              }
-            };
+            ) => onStatusChange(nextStatusId, successMessage);
 
             const showSupervisorApprovalUI =
               isSupervisorUser && key === 'waiting_for_approval';
@@ -1118,7 +1168,11 @@ export default function EditJobPage() {
                       variant="destructive"
                       className="button-click-effect"
                       disabled={statusUpdating || isTerminalStatus}
-                      onClick={() => handleSupervisorDecision('onsite')}
+                      onClick={() => {
+                        setRejectReason('');
+                        setRejectError('');
+                        setRejectOpen(true);
+                      }}
                     >
                       Reject
                     </Button>
@@ -1127,7 +1181,7 @@ export default function EditJobPage() {
                 <JobStatusSelector
                   statuses={statuses}
                   selectedStatus={formData.jobStatusId}
-                  onChange={onStatusChange}
+                  onChange={onStatusChangeLocal}
                   loading={statusUpdating}
                   disabled={selectorDisabled}
                 />
@@ -1136,6 +1190,12 @@ export default function EditJobPage() {
           })()}
         </div>
       </Card>
+      {onsiteWarning.show && (
+        <div className="mb-3 rounded-md border border-yellow-300 bg-yellow-50 p-3 text-yellow-900">
+          <div className="font-medium">Supervisor Note for On-Site Rework</div>
+          <div className="text-sm mt-1">{onsiteWarning.text}</div>
+        </div>
+      )}
 
       <Card className="p-4 md:p-6">
         <div className="border-b">
@@ -1650,6 +1710,104 @@ export default function EditJobPage() {
           </Button>
         </div>
       </Card>
+
+      {/* Reject dialog */}
+      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reject job – provide a reason</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Label htmlFor="reject-reason">Reason</Label>
+            <Textarea
+              id="reject-reason"
+              value={rejectReason}
+              onChange={(e) => {
+                setRejectReason(e.target.value);
+                if (rejectError) setRejectError('');
+              }}
+              placeholder="Describe why you’re rejecting and what needs rework…"
+              rows={4}
+            />
+            {!!rejectError && (
+              <p className="text-sm text-red-600">{rejectError}</p>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRejectOpen(false)}
+              disabled={rejectSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="text-white button-click-effect"
+              style={{ backgroundColor: primaryColor }}
+              disabled={rejectSubmitting}
+              onClick={async () => {
+                const reason = rejectReason.trim();
+                if (!reason) {
+                  setRejectError('Please enter a reason.');
+                  return;
+                }
+
+                // find On Site status as the reject target
+                const onsite =
+                  jobStatusOpts.find(
+                    (s) => canonicalKey(s.label) === 'onsite'
+                  ) ??
+                  jobStatusOpts.find((s) => /on\s*-?\s*site/i.test(s.label));
+
+                if (!onsite) {
+                  toast.error('On Site status is not available.');
+                  return;
+                }
+
+                try {
+                  setRejectSubmitting(true);
+                  await onStatusChange(
+                    onsite.value,
+                    'Job moved back to On Site.',
+                    { remarks: reason } // send remark to backend
+                  );
+
+                  // ⬇️ NEW: add to local status history so warning shows right away
+                  const id =
+                    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+                      ? (crypto as any).randomUUID()
+                      : Math.random().toString(36).slice(2);
+
+                  setStatusHistory((prev) => [
+                    ...prev,
+                    {
+                      id,
+                      job_status_id: String(onsite.value),
+                      job_status_title: onsite.name || 'OnSite',
+                      job_status_color_code: onsite.color,
+                      is_completed: false,
+                      remarks: reason,
+                      completed: false,
+                      at: new Date().toISOString(),
+                    },
+                  ]);
+
+                  setRejectOpen(false);
+                  toast.info('Technician needs to rework on the job.');
+                } finally {
+                  setRejectSubmitting(false);
+                }
+              }}
+            >
+              {rejectSubmitting ? 'Submitting…' : 'Submit & Reject'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/store/store';
@@ -51,6 +51,9 @@ export default function EditUserPage() {
   const [shifts, setShifts] = useState<any[]>([]);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [proofFile, setProofFile] = useState<File | null>(null);
+  // refs for hidden native file inputs
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+  const proofInputRef = useRef<HTMLInputElement | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordError, setPasswordError] = useState('');
@@ -405,15 +408,15 @@ export default function EditUserPage() {
         <div className="space-y-2">
           <Label className='pb-3'>Photo / Logo</Label>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-            <div className="flex justify-start" style={{
-              border: "3px dotted #b1b1b1",
-              borderRadius: "15px",
-              padding: "20px",
-              backgroundColor:  "#f8f9fa",
-              cursor: "pointer",
-              transition: "all 0.2s ease-in-out",
-              alignItems: "center",
-            }}>
+            <div className="flex justify-start" role="button" tabIndex={0} onClick={() => photoInputRef.current?.click()} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') photoInputRef.current?.click(); }} style={{
+               border: "3px dotted #b1b1b1",
+               borderRadius: "15px",
+               padding: "20px",
+               backgroundColor:  "#f8f9fa",
+               cursor: "pointer",
+               transition: "all 0.2s ease-in-out",
+               alignItems: "center",
+             }}>
               {photoFile ? (
                 <img src={URL.createObjectURL(photoFile)} alt="Photo Preview" className="w-32 h-32 object-contain border rounded-lg" />
               ) : formData.photo ? (
@@ -422,15 +425,13 @@ export default function EditUserPage() {
                 <div className="w-32 h-32 flex items-center justify-center text-gray-400 border border-dashed rounded-lg">No Photo</div>
               )}
             
-              <Input type="file" accept="image/*" onChange={(e) => setPhotoFile(e.target.files?.[0] || null)} className="border-2 border-dashed p-2" 
-                style={{
-                  opacity: 1,
-                  height: '125px',
-                   
-                  margin: '3px',
-                }} />
+              {/* hidden native input + upload button */}
+              <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setPhotoFile(e.target.files?.[0] || null)} />
+              <div className="ml-3">
+                <button type="button" onClick={(e) => { e.stopPropagation(); photoInputRef.current?.click(); }} className="px-3 py-1 bg-white border rounded">Upload Photo</button>
+              </div>
               {photoFile && <p className="mt-2 text-sm text-gray-600">{photoFile.name}</p>}
-            </div>
+             </div>
           </div>
         </div>
 
@@ -656,7 +657,9 @@ export default function EditUserPage() {
         {/* KYC / Proof Section */}
         <div className="border-t border-gray-200 pt-4 space-y-2">
           <Label className='pb-3'>Proof / Document</Label>
-          <Input type="file" accept="image/*,application/pdf" onChange={(e) => setProofFile(e.target.files?.[0] || null)} />
+          {/* hidden native input + upload button for proof */}
+          <input ref={proofInputRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => setProofFile(e.target.files?.[0] || null)} />
+          <div><button type="button" onClick={() => proofInputRef.current?.click()} className="px-3 py-1 bg-white border rounded">Upload Proof</button></div>
           {proofFile && <p className="text-sm text-gray-600 mt-1">{proofFile.name}</p>}
         </div>
 

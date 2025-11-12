@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/store/store';
@@ -29,6 +29,10 @@ export default function CompanyFormPage() {
 
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [proofFile, setProofFile] = useState<File | null>(null);
+
+  // refs for hidden file inputs
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
+  const proofInputRef = useRef<HTMLInputElement | null>(null);
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -350,27 +354,38 @@ export default function CompanyFormPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">{companyId ? 'Edit Company' : 'Create Company'}</h1>
       <Card className="p-6 space-y-8">
- <Label className="mb-2 block pb-1">Company Logo</Label>
+        <Label className="mb-2 block pb-1">Company Logo</Label>
         <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
-         
-          <div className='flex justify-start' style={{
-              border: "3px dotted #b1b1b1",
-              borderRadius: "15px",
-              padding: "20px",
-              backgroundColor:  "#f8f9fa",
-              cursor: "pointer",
-              transition: "all 0.2s ease-in-out",
-              alignItems: "center",
-            }}>
-           
-            {logoFile && <p className="text-sm mt-1">{logoFile.name}</p>}
-            {!logoFile && formData.logo && <img src={getImageUrl(formData.logo)} alt="Logo" className="w-32 h-32 object-contain mt-2" />}
-            <Input type="file" accept="image/*" onChange={(e) => setLogoFile(e.target.files?.[0] || null)} className='w-full h-32 flex items-center justify-center text-gray-400 border border-dashed rounded-lg'  style={{
-                  opacity: 1,
-                  height: '125px',
-                   
-                  margin: '3px',
-                }} />
+          <div
+            className="flex justify-start items-center"
+            role="button"
+            tabIndex={0}
+            onClick={() => logoInputRef.current?.click()}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') logoInputRef.current?.click(); }}
+            style={{
+              border: '3px dotted #b1b1b1',
+              borderRadius: '15px',
+              padding: '20px',
+              backgroundColor: '#f8f9fa',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease-in-out',
+            }}
+          >
+            <div>
+              {logoFile ? (
+                <p className="text-sm mt-1">{logoFile.name}</p>
+              ) : formData.logo ? (
+                <img src={getImageUrl(formData.logo)} alt="Logo" className="w-32 h-32 object-contain" />
+              ) : (
+                <div className="w-32 h-32 flex items-center justify-center text-gray-400 border border-dashed rounded-lg">No Logo</div>
+              )}
+            </div>
+            <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setLogoFile(e.target.files?.[0] || null)} />
+            <div className="ml-4">
+              <button type="button" onClick={(e) => { e.stopPropagation(); logoInputRef.current?.click(); }} className="px-3 py-1 bg-white border rounded">
+                Upload Logo
+              </button>
+            </div>
           </div>
         </div>
 
@@ -457,7 +472,10 @@ export default function CompanyFormPage() {
 
           <div>
             <Label className='pb-3'>Company Proof</Label>
-            <Input type="file" accept="application/pdf,image/*" onChange={(e) => setProofFile(e.target.files?.[0] || null)} />
+            <input ref={proofInputRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => setProofFile(e.target.files?.[0] || null)} />
+            <div>
+              <button type="button" onClick={() => proofInputRef.current?.click()} className="px-3 py-1 bg-white border rounded">Upload Proof</button>
+            </div>
             {proofFile && <p className="text-sm mt-1">{proofFile.name}</p>}
             {!proofFile && typeof formData.proof === 'string' && formData.proof && (
               (String(formData.proof).endsWith('.pdf') ? <a href={getImageUrl(formData.proof)} target="_blank" className="text-blue-600 underline">View PDF</a> : <img src={getImageUrl(formData.proof)} alt="Proof" className="w-32 h-32 object-contain mt-2" />)

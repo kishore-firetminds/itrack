@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSelector } from 'react-redux';
 import api from '@/utils/api';
@@ -23,6 +23,7 @@ export default function CreateClientPage() {
   const [districts, setDistricts] = useState<{ district_id: string; district_name: string }[]>([]);
   const [pincodes, setPincodes] = useState<{ pincode: string; lat?: string; lng?: string; hidden?: boolean }[]>([]);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
 
   interface ClientFormData {
     company_id: string;
@@ -243,6 +244,10 @@ export default function CreateClientPage() {
     {/* ✅ First Column — Photo Upload Box */}
     <div
       className="flex items-center gap-4"
+      role="button"
+      tabIndex={0}
+      onClick={() => photoInputRef.current?.click()}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') photoInputRef.current?.click(); }}
       style={{
         border: "3px dotted #b1b1b1",
         borderRadius: "15px",
@@ -265,18 +270,11 @@ export default function CreateClientPage() {
         </div>
       )}
 
-      <Input
-        type="file"
-        accept="image/*"
-        onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
-        className="border-2 border-dashed p-2"
-         style={{
-                  opacity: 1,
-                  height: '125px',
-                   
-                  margin: '3px',
-                }}
-      />
+      {/* hidden native file input triggered by clicking area or button */}
+      <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setPhotoFile(e.target.files?.[0] || null)} />
+      <div className="ml-3">
+        <button type="button" onClick={(e) => { e.stopPropagation(); photoInputRef.current?.click(); }} className="px-3 py-1 bg-white border rounded">Upload Photo</button>
+      </div>
     </div>
 
     {/* ✅ Second Column — Empty */}

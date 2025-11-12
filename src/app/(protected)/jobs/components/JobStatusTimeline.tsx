@@ -56,11 +56,12 @@ export default function JobStatusTimeline({ steps }: { steps: Step[] }) {
               </span>
               <div className="leading-tight">
                 <div
-                  className={`text-base font-semibold ${
+                  className={`flex flex-col text-base font-semibold ${
                     isDone ? 'text-gray-900' : 'text-gray-400'
                   }`}
                 >
                   {s.name}
+                  <span className="text-sm text-300 font-normal">{s.remarks}</span>
                 </div>
                 <div
                   className={`text-sm ${

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/store/store';
@@ -66,6 +66,7 @@ export default function VendorFormPage() {
   const [regions, setRegions] = useState<Region[]>([]);
 
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordError, setPasswordError] = useState('');
@@ -602,14 +603,18 @@ export default function VendorFormPage() {
     {/* ✅ Column 1 — Upload Box */}
     <div
       className="flex items-center gap-4 mt-2"
+      role="button"
+      tabIndex={0}
+      onClick={() => photoInputRef.current?.click()}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') photoInputRef.current?.click(); }}
       style={{
-        border: "3px dotted #b1b1b1",
-        borderRadius: "15px",
-        padding: "20px",
-        backgroundColor: "#f8f9fa",
-        cursor: "pointer",
-        transition: "all 0.2s ease-in-out",
-        alignItems: "center",
+        border: '3px dotted #b1b1b1',
+        borderRadius: '15px',
+        padding: '20px',
+        backgroundColor: '#f8f9fa',
+        cursor: 'pointer',
+        transition: 'all 0.2s ease-in-out',
+        alignItems: 'center',
       }}
     >
       {photoFile ? (
@@ -630,18 +635,14 @@ export default function VendorFormPage() {
         </div>
       )}
 
-      <Input
-        type="file"
-        accept="image/*"
-        onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
-        className="border-2 border-dashed p-2"
-        style={{
-          opacity: 1,
-          height: "125px",
-          margin: "3px",
-        }}
-      />
-    </div>
+      {/* hidden native file input triggered by clicking area or button */}
+      <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setPhotoFile(e.target.files?.[0] || null)} />
+      <div className="ml-3">
+        <button type="button" onClick={(e) => { e.stopPropagation(); photoInputRef.current?.click(); }} className="px-3 py-1 bg-white border rounded">
+          Upload Photo
+        </button>
+      </div>
+     </div>
 
     {/* ✅ Column 2 — Empty */}
     <div></div>
