@@ -120,6 +120,7 @@ type Step = {
   icon: React.ReactNode;
   color: string;
   status: StepStatus;
+  remarks?: string;
 };
 
 const fmtTime = (iso?: string) => {
@@ -255,7 +256,7 @@ export default function ViewJobPage() {
         icon,
         color: h.job_status_color_code || color,
         status: h.is_completed || !!h.at ? 'done' : 'pending',
-        remarks: h.remarks || '',
+        remarks: (h as any).remarks || '',
       };
     });
     // ensure typical milestones exist (pending if missing)

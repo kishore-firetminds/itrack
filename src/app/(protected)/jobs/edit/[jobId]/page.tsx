@@ -1787,7 +1787,7 @@ export default function EditJobPage() {
                     {
                       id,
                       job_status_id: String(onsite.value),
-                      job_status_title: onsite.name || 'OnSite',
+                      job_status_title: (onsite as any).name || 'OnSite',
                       job_status_color_code: onsite.color,
                       is_completed: false,
                       remarks: reason,
