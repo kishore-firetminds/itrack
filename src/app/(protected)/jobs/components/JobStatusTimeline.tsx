@@ -10,6 +10,7 @@ type Step = {
   icon: React.ReactNode;
   color: string;
   status: 'done' | 'pending';
+  remarks?: string;
 };
 
 export default function JobStatusTimeline({ steps }: { steps: Step[] }) {
@@ -61,7 +62,9 @@ export default function JobStatusTimeline({ steps }: { steps: Step[] }) {
                   }`}
                 >
                   {s.name}
-                  <span className="text-sm text-300 font-normal">{s.remarks}</span>
+                  <span className="text-sm text-300 font-normal">
+                    {s.remarks}
+                  </span>
                 </div>
                 <div
                   className={`text-sm ${
